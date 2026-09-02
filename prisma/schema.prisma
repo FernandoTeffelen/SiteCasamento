@@ -92,6 +92,8 @@ model Submission {
   weddingId    String
   guestId      String
   missionId    String
+  /// Identificador idempotente criado pela fila IndexedDB no aparelho.
+  clientUploadId String?
   sequence     Int              @default(1)
   status       SubmissionStatus @default(PENDING)
   /// Valor copiado da pontuação concedida, se houver; nunca vem do cliente.
@@ -106,7 +108,9 @@ model Submission {
   scoreEntry ScoreEntry?
 
   @@unique([id, weddingId])
+  @@unique([weddingId, clientUploadId])
   @@unique([guestId, missionId, sequence])
+  @@index([weddingId, clientUploadId])
   @@index([weddingId, status])
   @@index([guestId, createdAt])
   @@index([missionId, status])

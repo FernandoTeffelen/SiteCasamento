@@ -1,7 +1,7 @@
 import type { LocalUploadStatus, QueuePhotoInput, QueuedPhotoUpload } from "./types";
 
 const DATABASE_NAME = "jogo-de-fotos-offline";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const PHOTO_STORE = "photo-uploads";
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -14,9 +14,14 @@ function openDatabase(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = () => {
       const database = request.result;
-      const store = database.createObjectStore(PHOTO_STORE, { keyPath: "id" });
-      store.createIndex("by-event", "eventPublicId", { unique: false });
-      store.createIndex("by-created-at", "createdAt", { unique: false });
+      const store = database.objectStoreNames.contains(PHOTO_STORE)
+        ? request.transaction!.objectStore(PHOTO_STORE)
+        : database.createObjectStore(PHOTO_STORE, { keyPath: "id" });
+      if (!store.indexNames.contains("by-event")) store.createIndex("by-event", "eventPublicId", { unique: false });
+      if (!store.indexNames.contains("by-event-guest")) {
+        store.createIndex("by-event-guest", ["eventPublicId", "guestToken"], { unique: false });
+      }
+      if (!store.indexNames.contains("by-created-at")) store.createIndex("by-created-at", "createdAt", { unique: false });
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -63,7 +68,7 @@ function createQueueId() {
   return `photo-${Date.now()}-${values[0].toString(36)}${values[1].toString(36)}`;
 }
 
-/** Guarda o arquivo original no navegador até que uma fila futura o envie. */
+/** Guarda o arquivo original no navegador antes de qualquer tentativa de rede. */
 export async function queuePhoto(input: QueuePhotoInput): Promise<QueuedPhotoUpload> {
   const photo: QueuedPhotoUpload = {
     ...input,
@@ -77,13 +82,13 @@ export async function queuePhoto(input: QueuePhotoInput): Promise<QueuedPhotoUpl
   return photo;
 }
 
-export async function listQueuedPhotos(eventPublicId: string): Promise<QueuedPhotoUpload[]> {
+export async function listQueuedPhotos(eventPublicId: string, guestToken?: string): Promise<QueuedPhotoUpload[]> {
   const database = await openDatabase();
 
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(PHOTO_STORE, "readonly");
-    const index = transaction.objectStore(PHOTO_STORE).index("by-event");
-    const request = index.getAll(eventPublicId);
+    const index = transaction.objectStore(PHOTO_STORE).index(guestToken ? "by-event-guest" : "by-event");
+    const request = index.getAll(guestToken ? [eventPublicId, guestToken] : eventPublicId);
 
     request.onsuccess = () => {
       const photos = request.result.sort((first, second) => second.createdAt.localeCompare(first.createdAt));
@@ -100,17 +105,22 @@ export async function deleteQueuedPhoto(photoId: string): Promise<void> {
   await runTransaction("readwrite", (store) => store.delete(photoId));
 }
 
-/** Ponto de extensão para a futura fila automática de uploads. */
-export async function updateQueuedPhotoStatus(
+export type QueuedPhotoUpdate = Partial<Pick<
+  QueuedPhotoUpload,
+  "status" | "attempts" | "remoteSubmissionId" | "lastError"
+>>;
+
+export async function updateQueuedPhoto(
   photoId: string,
-  status: LocalUploadStatus,
-): Promise<void> {
+  changes: QueuedPhotoUpdate,
+): Promise<QueuedPhotoUpload> {
   const database = await openDatabase();
 
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(PHOTO_STORE, "readwrite");
     const store = transaction.objectStore(PHOTO_STORE);
     const getRequest = store.get(photoId);
+    let updatedPhoto: QueuedPhotoUpload | undefined;
 
     getRequest.onerror = () => reject(getRequest.error ?? new Error("Não foi possível localizar a foto."));
     getRequest.onsuccess = () => {
@@ -122,17 +132,25 @@ export async function updateQueuedPhotoStatus(
         return;
       }
 
-      store.put({ ...photo, status });
+      updatedPhoto = { ...photo, ...changes };
+      store.put(updatedPhoto);
     };
 
     transaction.oncomplete = () => {
       database.close();
-      resolve();
+      if (updatedPhoto) resolve(updatedPhoto);
     };
     transaction.onerror = () => {
       database.close();
-      reject(transaction.error ?? new Error("Não foi possível atualizar o status da foto."));
+      reject(transaction.error ?? new Error("Não foi possível atualizar a foto local."));
     };
     transaction.onabort = () => database.close();
   });
+}
+
+export async function updateQueuedPhotoStatus(
+  photoId: string,
+  status: LocalUploadStatus,
+): Promise<void> {
+  await updateQueuedPhoto(photoId, { status });
 }

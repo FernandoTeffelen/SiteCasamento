@@ -4,17 +4,17 @@
  */
 export interface ObjectStorage {
   put(input: UploadObjectInput): Promise<StoredObject>;
+  /** Não deve ser usado para expor fotos privadas sem autorização. */
   getPublicUrl(storageKey: string): string;
   delete(storageKey: string): Promise<void>;
 }
 
 export interface UploadObjectInput {
   storageKey: string;
-  body: ReadableStream<Uint8Array> | Uint8Array;
+  body: Uint8Array;
   contentType: string;
 }
 
 export interface StoredObject {
   storageKey: string;
 }
-

@@ -1,14 +1,65 @@
-import { registerMissionCompletion } from "@/server/game/game.service";
-import { jsonError, readJsonBody } from "@/server/http/api-response";
+import { DomainError } from "@/server/domain/error";
+import { jsonError } from "@/server/http/api-response";
+import {
+  deleteLegacyGuestSubmission,
+  uploadMissionPhoto,
+  type UploadPhotoFile,
+} from "@/server/uploads/photo-upload.service";
+import { getGuestTokenFromRequest } from "@/server/http/api-response";
+
+export const runtime = "nodejs";
+
+function getTextValue(formData: FormData, name: string) {
+  const value = formData.get(name);
+  return typeof value === "string" ? value : undefined;
+}
+
+function isUploadPhotoFile(value: FormDataEntryValue | null): value is File & UploadPhotoFile {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<UploadPhotoFile>;
+  return typeof candidate.arrayBuffer === "function"
+    && typeof candidate.type === "string"
+    && typeof candidate.size === "number";
+}
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ identifier: string; missionId: string }> },
 ) {
   try {
-    const [{ identifier, missionId }, body] = await Promise.all([params, readJsonBody(request)]);
-    const result = await registerMissionCompletion(identifier, body.guestToken, missionId);
+    const [{ identifier, missionId }, formData] = await Promise.all([params, request.formData()]);
+    const photo = formData.get("photo");
+    if (!isUploadPhotoFile(photo)) {
+      throw new DomainError("PHOTO_REQUIRED", 400, "Escolha uma foto para enviar.");
+    }
+
+    const result = await uploadMissionPhoto({
+      eventIdentifier: identifier,
+      guestToken: getTextValue(formData, "guestToken"),
+      missionId,
+      clientUploadId: getTextValue(formData, "uploadId"),
+      file: photo,
+    });
     return Response.json(result, { status: 201 });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ identifier: string; missionId: string }> },
+) {
+  try {
+    const { identifier, missionId } = await params;
+    const uploadId = new URL(request.url).searchParams.get("uploadId");
+    const result = await deleteLegacyGuestSubmission({
+      eventIdentifier: identifier,
+      guestToken: getGuestTokenFromRequest(request),
+      missionId,
+      clientUploadId: uploadId,
+    });
+    return Response.json(result);
   } catch (error) {
     return jsonError(error);
   }

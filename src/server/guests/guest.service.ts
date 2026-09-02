@@ -46,12 +46,14 @@ export async function registerOrIdentifyGuest(
       select: { id: true, token: true, name: true, score: true, weddingId: true },
     });
 
-    if (existingGuest) {
+    if (existingGuest && existingGuest.name.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR")) {
       return { wedding, guest: existingGuest, created: false };
     }
   }
 
-  // Um token de outro casamento nunca é reutilizado: o servidor cria uma nova identidade local.
+  // Um nome diferente no mesmo aparelho inicia uma nova identidade. Isso evita
+  // que o primeiro convidado fique preso ao formulário para sempre, sem
+  // permitir que o token de outro casamento seja reutilizado.
   const guest = await prisma.guest.create({
     data: { weddingId: wedding.id, name },
     select: { id: true, token: true, name: true, score: true, weddingId: true },

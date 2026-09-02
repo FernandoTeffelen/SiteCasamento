@@ -1,9 +1,52 @@
+# Dependências
 node_modules/
+
+# Builds e caches do Next.js
 .next/
 out/
+dist/
 coverage/
+test-results/
+playwright-report/
+blob-report/
 *.tsbuildinfo
+.turbo/
+.vercel/
+.local-storage/
+
+# Variáveis de ambiente e segredos
 .env
-.env.local
+.env.*
+!.env.example
+!.env.*.example
+
+# Cliente Prisma gerado localmente
 src/generated/prisma/
 
+# Logs e relatórios locais
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Arquivos de ideia/anotações locais
+*.txt
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editores e ferramentas locais
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Arquivos temporários
+*.tmp
+*.temp
+*.bak
+.eslintcache

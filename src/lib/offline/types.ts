@@ -11,6 +11,10 @@ export interface QueuedPhotoUpload {
   contentType: string;
   status: LocalUploadStatus;
   attempts: number;
+  /** Identificador do envio persistido no backend, quando confirmado. */
+  remoteSubmissionId?: string;
+  /** Último motivo conhecido; o arquivo nunca é descartado automaticamente. */
+  lastError?: string;
   createdAt: string;
 }
 

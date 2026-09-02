@@ -834,6 +834,15 @@ h1 span { color: #bf756d; }
 
 .photo-status-sent { color: #4b8a5c; }
 
+.photo-status-failed { color: #a23d39; }
+
+.photo-last-error {
+  margin: 0.35rem 0 0;
+  color: #8b4e49;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .photo-viewer-overlay {
   position: fixed;
   z-index: 20;

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { EventView } from "@/features/event/types";
 import { getLocalGuestName, getLocalGuestToken } from "@/lib/guest/local-guest";
 import { listQueuedPhotos, queuePhoto } from "@/lib/offline/photo-queue";
+import { uploadPendingPhotos, uploadQueuedPhoto, type UploadAttemptResult } from "@/lib/offline/upload-queue";
 
 type Mission = {
   id: string;
@@ -45,6 +46,7 @@ export function GameClient({ event }: { event: EventView }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const syncingRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -70,7 +72,7 @@ export function GameClient({ event }: { event: EventView }) {
         const [missionsResponse, scoreResponse, storedPhotos] = await Promise.all([
           fetch(`/api/events/${encodedIdentifier}/missions?guestToken=${encodedGuestToken}`),
           fetch(`/api/events/${encodedIdentifier}/guests/me?guestToken=${encodedGuestToken}`),
-          listQueuedPhotos(event.publicId),
+          listQueuedPhotos(event.publicId, savedToken),
         ]);
         const missionsPayload = await missionsResponse.json() as { missions?: Mission[]; guest?: { name?: string } } & ApiError;
         const scorePayload = await scoreResponse.json() as { score?: number; guest?: { name?: string } } & ApiError;
@@ -123,6 +125,49 @@ export function GameClient({ event }: { event: EventView }) {
     setPreview({ file, missionId: activeMissionId, url: URL.createObjectURL(file) });
   }
 
+  function applyUploadResult(result: UploadAttemptResult) {
+    if (result.ok) {
+      setScore(result.score);
+      setMissions((currentMissions) => currentMissions.map((item) => (
+        item.id === result.photo.missionId
+          ? { ...item, completed: true, submissionCount: item.submissionCount + 1 }
+          : item
+      )));
+      setNotice(result.awardedNow ? "Foto enviada e pontos contabilizados!" : "Foto enviada com sucesso.");
+      return;
+    }
+
+    setNotice(result.message);
+  }
+
+  async function syncPendingPhotos() {
+    if (syncingRef.current || document.visibilityState === "hidden") return;
+    const currentGuestToken = guestToken || getLocalGuestToken(event.publicId);
+    if (!currentGuestToken) return;
+    syncingRef.current = true;
+    try {
+      await uploadPendingPhotos(event.identifier, event.publicId, currentGuestToken, applyUploadResult);
+    } catch {
+      // A foto e seu status continuam no IndexedDB; a próxima ativação tentará de novo.
+    } finally {
+      syncingRef.current = false;
+    }
+  }
+
+  useEffect(() => {
+    const syncWhenPossible = () => void syncPendingPhotos();
+    void syncPendingPhotos();
+    window.addEventListener("online", syncWhenPossible);
+    document.addEventListener("visibilitychange", syncWhenPossible);
+
+    return () => {
+      window.removeEventListener("online", syncWhenPossible);
+      document.removeEventListener("visibilitychange", syncWhenPossible);
+    };
+  // A fila mantém os próprios dados; este efeito só reage quando a página está ativa.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.identifier, event.publicId]);
+
   async function acceptPhoto() {
     if (!preview || !guestToken) return;
     const mission = missions.find((item) => item.id === preview.missionId);
@@ -131,10 +176,10 @@ export function GameClient({ event }: { event: EventView }) {
     setIsSavingPhoto(true);
     setSaveError(null);
     setNotice(null);
-    let storedLocally = false;
+    let storedPhotoId: string | null = null;
 
     try {
-      await queuePhoto({
+      const storedPhoto = await queuePhoto({
         eventPublicId: event.publicId,
         missionId: mission.id,
         missionTitle: mission.title,
@@ -142,36 +187,15 @@ export function GameClient({ event }: { event: EventView }) {
         file: preview.file,
         contentType: preview.file.type || "image/jpeg",
       });
-      storedLocally = true;
+      storedPhotoId = storedPhoto.id;
       setLocalPhotoCounts((counts) => ({ ...counts, [mission.id]: (counts[mission.id] ?? 0) + 1 }));
-
-      const response = await fetch(
-        `/api/events/${encodeURIComponent(event.identifier)}/missions/${encodeURIComponent(mission.id)}/submissions`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ guestToken }),
-        },
-      );
-      const payload = await response.json() as {
-        score?: number;
-        awardedNow?: boolean;
-        error?: { message?: string };
-      };
-
-      if (!response.ok) throw new Error(readApiError(payload, "Não foi possível registrar a missão."));
-
-      setScore(payload.score ?? score);
-      setMissions((currentMissions) => currentMissions.map((item) => (
-        item.id === mission.id
-          ? { ...item, completed: true, submissionCount: item.submissionCount + 1 }
-          : item
-      )));
+      const result = await uploadQueuedPhoto(event.identifier, storedPhoto);
+      applyUploadResult(result);
       setPreview(null);
     } catch (error) {
-      if (storedLocally) {
+      if (storedPhotoId) {
         setPreview(null);
-        setNotice("Foto guardada neste aparelho. A conclusão ainda não foi registrada no servidor.");
+        setNotice("Foto guardada neste aparelho. Você poderá tentar enviá-la em Minhas fotos.");
       } else {
         setSaveError(error instanceof Error ? error.message : "Não foi possível guardar a foto neste aparelho.");
       }
@@ -300,7 +324,7 @@ export function GameClient({ event }: { event: EventView }) {
               </button>
             </div>
             {saveError ? <p className="preview-error" role="alert">{saveError}</p> : null}
-            <p className="preview-note">A foto fica neste aparelho; o upload do arquivo será implementado depois.</p>
+            <p className="preview-note">A foto é guardada neste aparelho antes do envio. Se a conexão falhar, você poderá reenviá-la.</p>
           </div>
         </section>
       ) : null}
