@@ -1,0 +1,128 @@
+IDEIA FUTURA DO PROJETO — PLATAFORMA PARA VÁRIOS CASAMENTOS
+
+Antes de tomar decisões importantes, leia também o arquivo ideia.txt. Ele contém a ideia original e a base da experiência desejada. Este arquivo não substitui o ideia.txt: ele complementa aquela visão e explica como o projeto deverá funcionar no futuro.
+
+O projeto não será feito apenas para um casal ou um único casamento. A intenção é transformá-lo em uma plataforma reutilizável em vários casamentos, na qual diferentes casais possam ter seus próprios eventos e utilizar o sistema de forma independente.
+
+O protótipo inicial pode continuar usando um casamento fictício e dados mockados. Porém, a estrutura do código deve evitar regras, nomes, missões, imagens e identificadores fixos de um único casal. O sistema precisa poder evoluir sem que seja necessário reconstruir todo o projeto.
+
+VISÃO DO PRODUTO PRONTO
+
+No futuro, um casal poderá criar ou contratar um evento dentro da plataforma. Cada casamento terá uma página própria, identificada por um endereço seguro, slug ou token, por exemplo:
+
+/evento/ana-e-joao
+
+ou
+
+/evento/a8f4k2
+
+Cada evento terá seus próprios dados:
+
+- nomes dos noivos;
+- data e informações do casamento;
+- identidade visual, capa, cores e mensagem de boas-vindas;
+- QR Code exclusivo;
+- lista de convidados ou participantes;
+- missões fotográficas;
+- pontuação e ranking;
+- fotos e vídeos enviados;
+- configurações de privacidade;
+- período em que o evento estará disponível;
+- área administrativa própria.
+
+Ao escanear o QR Code, o convidado deverá entrar diretamente no casamento correto. Ele não poderá visualizar informações, missões, ranking ou fotos de outro casamento.
+
+EXPERIÊNCIA DO CONVIDADO
+
+O convidado não deverá precisar instalar aplicativo nem criar uma conta tradicional com e-mail e senha. A experiência principal continuará sendo:
+
+QR Code -> página do casamento -> informar nome ou identificação -> entrar no jogo -> cumprir missões -> tirar fotos -> ganhar pontos -> acompanhar o ranking.
+
+O sistema deve ser mobile-first e funcionar muito bem no Safari do iPhone e no Chrome do Android. Internet lenta, instável ou temporariamente indisponível deve ser tratada como uma situação normal.
+
+Se uma foto não puder ser enviada no momento, ela deverá ficar salva localmente com um status claro e ser reenviada com segurança quando houver conexão e o site estiver ativo. Uma falha de internet não pode apagar silenciosamente uma foto do convidado.
+
+EXPERIÊNCIA DOS NOIVOS OU ORGANIZADORES
+
+Cada casal ou organizador deverá ter acesso somente ao seu próprio evento. Em uma futura área administrativa, deverá ser possível:
+
+- criar e editar o casamento;
+- personalizar nomes, textos, capa e cores;
+- criar, editar, ordenar, ativar e desativar missões;
+- definir a pontuação de cada missão;
+- gerar e baixar o QR Code do evento;
+- visualizar participantes e ranking;
+- visualizar, aprovar, ocultar ou excluir fotos;
+- controlar se o álbum e o ranking serão públicos para os convidados;
+- baixar fotos individualmente ou todo o álbum;
+- encerrar ou arquivar o evento após o casamento.
+
+No início, nem todas essas funções precisam ser implementadas. Elas representam a direção futura do produto.
+
+ADMINISTRAÇÃO DA PLATAFORMA
+
+Além da área de cada casal, poderá existir futuramente uma administração geral da plataforma. Esse administrador poderá gerenciar os vários casamentos cadastrados, verificar status, armazenamento utilizado, datas, planos e possíveis problemas. Esse acesso deverá ser separado do acesso dos noivos.
+
+SEPARAÇÃO ENTRE CASAMENTOS
+
+O sistema será multi-evento. Todo dado que pertence a um casamento deverá estar corretamente associado ao evento correspondente. Isso inclui convidados, missões, fotos, envios, pontuações, ranking, configurações e arquivos.
+
+Essa separação não deve existir apenas na interface. O backend e o banco de dados também deverão validar o evento em todas as operações. Não se deve confiar somente em um identificador enviado pelo navegador.
+
+Um casal nunca poderá:
+
+- acessar o painel de outro casal;
+- visualizar ou baixar fotos de outro casamento;
+- alterar missões de outro evento;
+- consultar convidados ou ranking de outro evento;
+- descobrir eventos privados apenas alterando um número na URL.
+
+FOTOS E ARMAZENAMENTO
+
+As fotos não deverão ser armazenadas diretamente como arquivos dentro do código do site. No ambiente final, o ideal é utilizar um serviço apropriado de armazenamento de objetos, mantendo no banco apenas os dados necessários e a referência segura do arquivo.
+
+Cada envio deverá estar relacionado, no mínimo, ao evento, convidado e missão correspondentes. Também deverá possuir status, data de criação e informações necessárias para impedir pontuação duplicada ou uploads repetidos.
+
+O sistema deverá validar tipo e tamanho de arquivo, gerar nomes seguros, impedir arquivos maliciosos e evitar exposição pública indevida. Deve existir uma estratégia de limites, retenção e exclusão das fotos, pois vários casamentos poderão gerar uma grande quantidade de arquivos.
+
+PONTUAÇÃO E RANKING
+
+A pontuação nunca deverá ser calculada ou aceita como verdadeira apenas pelo frontend. O servidor deverá validar a missão, o convidado, o evento e as regras antes de conceder pontos.
+
+Por padrão, um convidado não deverá ganhar pontos repetidamente enviando várias fotos para a mesma missão, salvo se uma configuração futura da missão permitir isso.
+
+O ranking deverá sempre considerar somente os participantes do casamento atual.
+
+PRIVACIDADE E CICLO DE VIDA
+
+Fotos de casamento são conteúdo pessoal. O projeto deverá permitir definir quem pode acessar o álbum e por quanto tempo. Eventos poderão ter estados como rascunho, ativo, encerrado e arquivado.
+
+Também será necessário pensar futuramente em:
+
+- consentimento e aviso de privacidade;
+- remoção de fotos;
+- prazo de armazenamento após o casamento;
+- download do álbum antes da exclusão;
+- proteção de eventos privados;
+- backups e recuperação de dados;
+- limites de armazenamento por evento ou plano.
+
+COMO EVOLUIR O PROJETO
+
+O projeto deve continuar sendo desenvolvido em etapas pequenas e testáveis. Não implemente toda esta visão de uma vez.
+
+Ao criar novas funcionalidades, considere esta visão futura e evite soluções que funcionem apenas para o casal fictício do protótipo. Ao mesmo tempo, não adicione complexidade desnecessária antes da hora.
+
+Antes de alterar a stack ou refazer partes importantes, analise o que já existe no projeto. Preserve funcionalidades que já estejam funcionando e explique decisões arquiteturais relevantes.
+
+As prioridades continuam sendo:
+
+1. experiência simples para o convidado;
+2. funcionamento confiável no iPhone/Safari e Android/Chrome;
+3. proteção das fotos e separação entre casamentos;
+4. tolerância a internet instável;
+5. código organizado e fácil de evoluir;
+6. desenvolvimento incremental, com testes após cada etapa;
+7. estrutura preparada para vários eventos, sem antecipar complexidade desnecessária.
+
+Em resumo, o protótipo atual mostra a experiência de um único casamento. O produto pronto deverá ser uma plataforma na qual vários casais utilizam o mesmo sistema, mas cada casamento funciona como um ambiente separado, seguro, personalizável e independente.

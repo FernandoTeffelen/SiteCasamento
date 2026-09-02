@@ -1,0 +1,10 @@
+{
+  "name": "Jogo de Fotos",
+  "short_name": "Jogo de Fotos",
+  "description": "Jogo de fotos para convidados de casamentos.",
+  "lang": "pt-BR",
+  "display": "standalone",
+  "background_color": "#fffaf7",
+  "theme_color": "#fffaf7"
+}
+

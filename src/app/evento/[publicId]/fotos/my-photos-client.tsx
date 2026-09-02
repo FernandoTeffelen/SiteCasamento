@@ -1,0 +1,170 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import type { EventView } from "@/features/event/types";
+import { deleteQueuedPhoto, listQueuedPhotos } from "@/lib/offline/photo-queue";
+import type { QueuedPhotoUpload } from "@/lib/offline/types";
+
+type LocalPhoto = QueuedPhotoUpload & { previewUrl: string };
+
+function getStatus(status: QueuedPhotoUpload["status"]) {
+  return status === "uploaded"
+    ? { label: "Enviada", className: "photo-status-sent" }
+    : { label: "Aguardando envio", className: "photo-status-pending" };
+}
+
+export function MyPhotosClient({ event }: { event: EventView }) {
+  const [photos, setPhotos] = useState<LocalPhoto[]>([]);
+  const [selectedPhoto, setSelectedPhoto] = useState<LocalPhoto | null>(null);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const objectUrls: string[] = [];
+
+    void listQueuedPhotos(event.publicId)
+      .then((storedPhotos) => {
+        const localPhotos = storedPhotos.map((photo) => {
+          const previewUrl = URL.createObjectURL(photo.file);
+          objectUrls.push(previewUrl);
+          return { ...photo, previewUrl };
+        });
+
+        if (!isMounted) {
+          objectUrls.forEach((url) => URL.revokeObjectURL(url));
+          return;
+        }
+
+        setPhotos(localPhotos);
+      })
+      .catch(() => {
+        if (isMounted) setLoadError("Não foi possível acessar as fotos guardadas neste aparelho.");
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [event.publicId]);
+
+  const photoGroups = photos.reduce<Array<{ missionId: string; missionTitle: string; photos: LocalPhoto[] }>>(
+    (groups, photo) => {
+      const existingGroup = groups.find((group) => group.missionId === photo.missionId);
+      if (existingGroup) existingGroup.photos.push(photo);
+      else groups.push({ missionId: photo.missionId, missionTitle: photo.missionTitle, photos: [photo] });
+      return groups;
+    },
+    [],
+  );
+
+  async function deletePhoto(photo: LocalPhoto) {
+    const confirmed = window.confirm("Excluir esta foto deste aparelho? Esta ação não pode ser desfeita.");
+    if (!confirmed) return;
+
+    setDeletingPhotoId(photo.id);
+    setLoadError(null);
+
+    try {
+      await deleteQueuedPhoto(photo.id);
+      setPhotos((currentPhotos) => currentPhotos.filter((item) => item.id !== photo.id));
+      if (selectedPhoto?.id === photo.id) setSelectedPhoto(null);
+      URL.revokeObjectURL(photo.previewUrl);
+    } catch {
+      setLoadError("Não foi possível excluir a foto. Tente novamente.");
+    } finally {
+      setDeletingPhotoId(null);
+    }
+  }
+
+  return (
+    <main className="my-photos-screen">
+      <header className="photos-header">
+        <Link className="back-link" href={`/evento/${encodeURIComponent(event.identifier)}/jogo`}>← Jogo</Link>
+        <p className="game-event-name">{event.brideName} &amp; {event.groomName}</p>
+        <h1>Minhas fotos</h1>
+        <p>Você pode guardar várias fotos por missão. Os pontos da missão contam apenas uma vez.</p>
+      </header>
+
+      {isLoading ? <p className="photos-feedback">Carregando suas fotos…</p> : null}
+      {loadError ? <p className="photos-feedback photos-error" role="alert">{loadError}</p> : null}
+
+      {!isLoading && !loadError && photos.length === 0 ? (
+        <section className="empty-photos">
+          <span aria-hidden="true">📷</span>
+          <h2>Nenhuma foto ainda</h2>
+          <p>Quando você confirmar uma foto em uma missão, ela aparecerá aqui aguardando envio.</p>
+          <Link href={`/evento/${encodeURIComponent(event.identifier)}/jogo`}>Ver missões</Link>
+        </section>
+      ) : null}
+
+      {photoGroups.length > 0 ? (
+        <div className="photo-groups">
+          {photoGroups.map((group) => (
+            <section className="mission-photo-group" key={group.missionId} aria-labelledby={`group-${group.missionId}`}>
+              <div className="photo-group-heading">
+                <h2 id={`group-${group.missionId}`}>{group.missionTitle}</h2>
+                <span>{group.photos.length} {group.photos.length === 1 ? "foto" : "fotos"}</span>
+              </div>
+
+              <div className="saved-photo-list">
+                {group.photos.map((photo, index) => {
+                  const status = getStatus(photo.status);
+                  const isDeleting = deletingPhotoId === photo.id;
+
+                  return (
+                    <article className="saved-photo-card" key={photo.id}>
+                      {/* A imagem é uma URL blob local, portanto não passa pelo otimizador do Next. */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photo.previewUrl} alt={`Foto ${index + 1} da missão ${photo.missionTitle}`} />
+                      <div className="saved-photo-content">
+                        <p className="saved-photo-mission">Foto {index + 1}</p>
+                        <span className={`photo-status ${status.className}`}>
+                          <span aria-hidden="true">{photo.status === "uploaded" ? "✓" : "◷"}</span> {status.label}
+                        </span>
+                        <div className="saved-photo-actions">
+                          <button type="button" onClick={() => setSelectedPhoto(photo)}>Abrir foto</button>
+                          <button
+                            className="delete-photo-button"
+                            type="button"
+                            onClick={() => void deletePhoto(photo)}
+                            disabled={isDeleting}
+                          >
+                            {isDeleting ? "Excluindo…" : "Excluir"}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : null}
+
+      {selectedPhoto ? (
+        <section className="photo-viewer-overlay" role="dialog" aria-modal="true" aria-labelledby="photo-viewer-title">
+          <div className="photo-viewer">
+            <div className="photo-viewer-heading">
+              <div>
+                <p>Visualizando foto</p>
+                <h2 id="photo-viewer-title">{selectedPhoto.missionTitle}</h2>
+              </div>
+              <button type="button" onClick={() => setSelectedPhoto(null)} aria-label="Fechar foto">×</button>
+            </div>
+            {/* A imagem é uma URL blob local, portanto não passa pelo otimizador do Next. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={selectedPhoto.previewUrl} alt={`Foto ampliada da missão ${selectedPhoto.missionTitle}`} />
+            <button className="close-photo-viewer" type="button" onClick={() => setSelectedPhoto(null)}>Fechar</button>
+          </div>
+        </section>
+      ) : null}
+    </main>
+  );
+}

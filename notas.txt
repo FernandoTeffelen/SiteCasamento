@@ -1,0 +1,32 @@
+COMO RODAR E TESTAR
+
+BANCO LOCAL (uma vez antes de testar a camada de banco)
+   - Copie .env.example para .env.
+   - Inicie o Docker Desktop e rode: npm run db:up
+   - Aplique o banco: npm run db:deploy
+   - Crie os dois casamentos ficticios: npm run db:seed
+   - Verifique: npm run db:check
+   - Para parar sem apagar os dados: npm run db:stop
+
+1. No PC
+   - No terminal, nesta pasta: npm install
+   - Copie .env.example para .env.
+   - Rode: npm run dev
+   - Abra: http://localhost:3000/evento/ana-e-joao
+   - Jogo: http://localhost:3000/evento/ana-e-joao/jogo
+
+2. Android
+   - Deixe PC e Android na mesma rede Wi-Fi.
+   - Rode: npm run dev -- --hostname 0.0.0.0
+   - Descubra o IP do PC com: ipconfig
+   - No Chrome do Android, abra: http://SEU-IP:3000/evento/ana-e-joao/jogo
+   - Teste a camera e depois "Minhas fotos". Permita o acesso a camera quando o Android pedir.
+
+3. iPhone
+   - O processo e igual ao Android, mas abra o endereco no Safari do iPhone.
+   - Em producao, a camera deve ser testada em HTTPS; localhost e uma excecao apenas para o proprio aparelho.
+
+SEM IPHONE
+   - Use o modo responsivo do Chrome/Edge (F12 > icone de celular) para testar layout e toque, mas isso NAO reproduz o Safari.
+   - O Android testa camera e armazenamento local reais, mas nao substitui o Safari.
+   - Antes de publicar, a melhor validacao e pedir para alguem com iPhone abrir uma URL HTTPS de teste e conferir: camera, previa, "Minhas fotos" e recarregamento da pagina.

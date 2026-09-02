@@ -1,0 +1,138 @@
+import type { LocalUploadStatus, QueuePhotoInput, QueuedPhotoUpload } from "./types";
+
+const DATABASE_NAME = "jogo-de-fotos-offline";
+const DATABASE_VERSION = 1;
+const PHOTO_STORE = "photo-uploads";
+
+function openDatabase(): Promise<IDBDatabase> {
+  if (typeof indexedDB === "undefined") {
+    return Promise.reject(new Error("Este navegador não oferece armazenamento local para fotos."));
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      const store = database.createObjectStore(PHOTO_STORE, { keyPath: "id" });
+      store.createIndex("by-event", "eventPublicId", { unique: false });
+      store.createIndex("by-created-at", "createdAt", { unique: false });
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("Não foi possível abrir o armazenamento local."));
+  });
+}
+
+async function runTransaction<T>(
+  mode: IDBTransactionMode,
+  operation: (store: IDBObjectStore) => IDBRequest<T>,
+): Promise<T> {
+  const database = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(PHOTO_STORE, mode);
+    const request = operation(transaction.objectStore(PHOTO_STORE));
+    let result: T;
+
+    request.onsuccess = () => {
+      result = request.result;
+    };
+    request.onerror = () => reject(request.error ?? new Error("Não foi possível salvar a foto localmente."));
+    transaction.oncomplete = () => {
+      database.close();
+      resolve(result);
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Não foi possível salvar a foto localmente."));
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(transaction.error ?? new Error("A gravação local da foto foi cancelada."));
+    };
+  });
+}
+
+function createQueueId() {
+  if (typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  const values = crypto.getRandomValues(new Uint32Array(2));
+  return `photo-${Date.now()}-${values[0].toString(36)}${values[1].toString(36)}`;
+}
+
+/** Guarda o arquivo original no navegador até que uma fila futura o envie. */
+export async function queuePhoto(input: QueuePhotoInput): Promise<QueuedPhotoUpload> {
+  const photo: QueuedPhotoUpload = {
+    ...input,
+    id: createQueueId(),
+    status: "pending",
+    attempts: 0,
+    createdAt: new Date().toISOString(),
+  };
+
+  await runTransaction("readwrite", (store) => store.add(photo));
+  return photo;
+}
+
+export async function listQueuedPhotos(eventPublicId: string): Promise<QueuedPhotoUpload[]> {
+  const database = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(PHOTO_STORE, "readonly");
+    const index = transaction.objectStore(PHOTO_STORE).index("by-event");
+    const request = index.getAll(eventPublicId);
+
+    request.onsuccess = () => {
+      const photos = request.result.sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+      resolve(photos);
+    };
+    request.onerror = () => reject(request.error ?? new Error("Não foi possível ler as fotos locais."));
+    transaction.oncomplete = () => database.close();
+    transaction.onerror = () => database.close();
+    transaction.onabort = () => database.close();
+  });
+}
+
+export async function deleteQueuedPhoto(photoId: string): Promise<void> {
+  await runTransaction("readwrite", (store) => store.delete(photoId));
+}
+
+/** Ponto de extensão para a futura fila automática de uploads. */
+export async function updateQueuedPhotoStatus(
+  photoId: string,
+  status: LocalUploadStatus,
+): Promise<void> {
+  const database = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(PHOTO_STORE, "readwrite");
+    const store = transaction.objectStore(PHOTO_STORE);
+    const getRequest = store.get(photoId);
+
+    getRequest.onerror = () => reject(getRequest.error ?? new Error("Não foi possível localizar a foto."));
+    getRequest.onsuccess = () => {
+      const photo = getRequest.result as QueuedPhotoUpload | undefined;
+
+      if (!photo) {
+        transaction.abort();
+        reject(new Error("Foto local não encontrada."));
+        return;
+      }
+
+      store.put({ ...photo, status });
+    };
+
+    transaction.oncomplete = () => {
+      database.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      database.close();
+      reject(transaction.error ?? new Error("Não foi possível atualizar o status da foto."));
+    };
+    transaction.onabort = () => database.close();
+  });
+}

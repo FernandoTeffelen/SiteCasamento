@@ -1,0 +1,153 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WeddingStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  PENDING
+  UPLOADING
+  UPLOADED
+  FAILED
+  REJECTED
+}
+
+model Wedding {
+  id        String        @id @default(cuid())
+  /// Token opaco usado no QR Code; nunca use o id interno no cliente.
+  publicId  String        @unique @default(cuid())
+  /// Endereço legível opcional. Eventos privados podem usar somente o token público.
+  slug      String?       @unique
+  name      String
+  brideName String
+  groomName String
+  eventDate DateTime?
+  status    WeddingStatus @default(DRAFT)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  guests       Guest[]
+  missions     Mission[]
+  submissions  Submission[]
+  photos       Photo[]
+  scoreEntries ScoreEntry[]
+
+  @@index([status, eventDate])
+}
+
+model Guest {
+  id        String   @id @default(cuid())
+  weddingId String
+  name      String
+  /// Token aleatório persistido no dispositivo; não é uma conta por e-mail.
+  token     String   @unique @default(cuid())
+  /// Cache do ranking. A fonte de auditoria é ScoreEntry, calculada pelo servidor.
+  score     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  wedding      Wedding      @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  submissions  Submission[]
+  scoreEntries ScoreEntry[]
+
+  @@unique([id, weddingId])
+  @@index([weddingId, score(sort: Desc)])
+}
+
+model Mission {
+  id             String   @id @default(cuid())
+  weddingId      String
+  title          String
+  description    String?
+  points         Int
+  active         Boolean  @default(true)
+  displayOrder   Int
+  /// Nulo significa que a missão aceita fotos extras sem conceder pontos extras.
+  maxSubmissions Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  wedding      Wedding      @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  submissions  Submission[]
+  scoreEntries ScoreEntry[]
+
+  @@unique([id, weddingId])
+  @@unique([weddingId, displayOrder])
+  @@index([weddingId, active, displayOrder])
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  weddingId    String
+  guestId      String
+  missionId    String
+  sequence     Int              @default(1)
+  status       SubmissionStatus @default(PENDING)
+  /// Valor copiado da pontuação concedida, se houver; nunca vem do cliente.
+  scoreAwarded Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  wedding    Wedding    @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  guest      Guest      @relation(fields: [guestId, weddingId], references: [id, weddingId], onDelete: Cascade)
+  mission    Mission    @relation(fields: [missionId, weddingId], references: [id, weddingId], onDelete: Cascade)
+  photo      Photo?
+  scoreEntry ScoreEntry?
+
+  @@unique([id, weddingId])
+  @@unique([guestId, missionId, sequence])
+  @@index([weddingId, status])
+  @@index([guestId, createdAt])
+  @@index([missionId, status])
+}
+
+model Photo {
+  id           String   @id @default(cuid())
+  weddingId    String
+  submissionId String   @unique
+  /// Chave privada no object storage; a URL assinada será criada no servidor futuramente.
+  storageKey   String   @unique
+  originalName String?
+  contentType  String
+  sizeBytes    Int
+  createdAt    DateTime @default(now())
+
+  wedding    Wedding    @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId, weddingId], references: [id, weddingId], onDelete: Cascade)
+
+  @@unique([submissionId, weddingId])
+  @@index([weddingId, createdAt])
+}
+
+model ScoreEntry {
+  id           String   @id @default(cuid())
+  weddingId    String
+  guestId      String
+  missionId    String
+  submissionId String   @unique
+  points       Int
+  createdAt    DateTime @default(now())
+
+  wedding    Wedding    @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  guest      Guest      @relation(fields: [guestId, weddingId], references: [id, weddingId], onDelete: Cascade)
+  mission    Mission    @relation(fields: [missionId, weddingId], references: [id, weddingId], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId, weddingId], references: [id, weddingId], onDelete: Cascade)
+
+  @@unique([id, weddingId])
+  /// Impede pontos duplicados para a mesma missão, mesmo que ela aceite várias fotos.
+  @@unique([guestId, missionId])
+  @@unique([submissionId, weddingId])
+  @@index([weddingId, points])
+  @@index([weddingId, guestId])
+}
