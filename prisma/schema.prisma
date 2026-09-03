@@ -15,6 +15,22 @@ enum WeddingStatus {
   ARCHIVED
 }
 
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum PlatformRole {
+  USER
+  PLATFORM_ADMIN
+}
+
+enum WeddingTemplateTier {
+  FREE
+  PREMIUM
+}
+
 enum SubmissionStatus {
   PENDING
   UPLOADING
@@ -23,50 +39,426 @@ enum SubmissionStatus {
   REJECTED
 }
 
-model Wedding {
-  id        String        @id @default(cuid())
-  /// Token opaco usado no QR Code; nunca use o id interno no cliente.
-  publicId  String        @unique @default(cuid())
-  /// Endereço legível opcional. Eventos privados podem usar somente o token público.
-  slug      String?       @unique
-  name      String
-  brideName String
-  groomName String
-  eventDate DateTime?
-  status    WeddingStatus @default(DRAFT)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+/// O arquivo pode ser enviado e pontuado antes da curadoria. A moderação
+/// controla a futura exibição pública, não a integridade do envio.
+enum PhotoModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
 
-  guests       Guest[]
-  missions     Mission[]
+/// Todo lançamento é criado pelo backend e preserva a causa do ponto para
+/// auditoria e para futuros ajustes manuais sem confundir os dois casos.
+enum ScoreEntrySource {
+  MISSION_COMPLETION
+  ADMIN_ADJUSTMENT
+}
+
+enum SubscriptionTier {
+  STARTER
+  PRO
+  AGENCY
+}
+
+enum SubscriptionPeriod {
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum OneTimePurchaseStatus {
+  PENDING
+  COMPLETED
+  CANCELED
+  REFUNDED
+}
+
+enum CreditLedgerEntryType {
+  ONE_TIME_PURCHASE
+  SUBSCRIPTION_CYCLE
+  WEDDING_ACTIVATION
+  REFUND
+  ADJUSTMENT
+}
+
+enum CommercialAddOnKind {
+  PREMIUM_TEMPLATE
+  WHITE_LABEL
+  ADDITIONAL_SERVICE
+}
+
+enum EntitlementStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+/// Catálogo global da plataforma. Um template pode ser reutilizado por várias organizações e casamentos.
+model WeddingTemplate {
+  id            String              @id @default(cuid())
+  slug          String              @unique
+  name          String
+  description   String?
+  tier          WeddingTemplateTier @default(FREE)
+  thumbnailUrl  String?
+  previewUrl    String?
+  /// Configuração visual padrão, validada pela camada de domínio antes de ser usada.
+  defaultConfig Json
+  active        Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  weddings        Wedding[]
+  commercialAddOn CommercialAddOn?
+
+  @@index([tier, active])
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  /// Identificador público seguro para integrações futuras; nunca expõe o id interno.
+  publicId  String   @unique @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships    OrganizationMembership[]
+  weddings       Wedding[]
+  guests         Guest[]
+  missions       Mission[]
+  submissions    Submission[]
+  photos         Photo[]
+  scoreEntries   ScoreEntry[]
+  customizations WeddingCustomization[]
+  creditBalance  OrganizationCreditBalance?
+  creditEntries  CreditLedgerEntry[]
+  subscriptions  OrganizationSubscription[]
+  purchases      OneTimePurchase[]
+  entitlements   OrganizationEntitlement[]
+}
+
+model User {
+  id                String       @id @default(cuid())
+  /// E-mail é a identidade estável para o futuro provedor de autenticação.
+  email             String       @unique
+  name              String?
+  /// Senha exclusiva do painel. Nunca é devolvida por serviços públicos e é
+  /// persistida somente como hash com salt.
+  passwordHash      String?
+  passwordUpdatedAt DateTime?
+  platformRole      PlatformRole @default(USER)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  memberships     OrganizationMembership[]
+  moderatedPhotos Photo[]                  @relation("PhotoModeratedBy")
+  adminSessions   AdminSession[]
+}
+
+/// Sessões opacas do painel. O navegador recebe somente o token aleatório; o
+/// banco guarda seu SHA-256, permitindo revogação e expiração imediatas.
+model AdminSession {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+/// Um usuário pode administrar mais de uma organização e cada organização pode ter uma equipe.
+model OrganizationMembership {
+  id             String           @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationRole @default(MEMBER)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId, organizationId])
+}
+
+model Wedding {
+  id                    String        @id @default(cuid())
+  organizationId        String
+  templateId            String?
+  /// Token opaco usado no QR Code; nunca use o id interno no cliente.
+  publicId              String        @unique @default(cuid())
+  /// Endereço legível opcional. Eventos privados podem usar somente o token público.
+  slug                  String?       @unique
+  name                  String
+  brideName             String
+  groomName             String
+  eventDate             DateTime?
+  /// Janela explícita da experiência pública. Dados do evento permanecem
+  /// acessíveis ao painel após o término desta janela.
+  publicAccessStartsAt  DateTime?
+  publicAccessEndsAt    DateTime?
+  publicAccessRevokedAt DateTime?
+  status                WeddingStatus @default(DRAFT)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  organization  Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template      WeddingTemplate?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  customization WeddingCustomization?
+  guests        Guest[]
+  missions      Mission[]
+  submissions   Submission[]
+  photos        Photo[]
+  scoreEntries  ScoreEntry[]
+  creditEntries CreditLedgerEntry[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status, eventDate])
+  @@index([status, publicAccessStartsAt, publicAccessEndsAt])
+  @@index([templateId])
+}
+
+/// Catálogo global de pacotes de créditos avulsos. Não representa uma compra;
+/// a compra da organização é registrada em OneTimePurchase.
+model CreditPackage {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  credits     Int
+  priceCents  Int?
+  currency    String   @default("BRL")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchases OneTimePurchase[]
+
+  @@index([active])
+}
+
+/// Uma opção específica do catálogo: categoria + período. Os créditos são
+/// concedidos por ciclo: Starter trimestral, por exemplo, concede 9 créditos.
+model SubscriptionPlan {
+  id              String             @id @default(cuid())
+  slug            String             @unique
+  name            String
+  tier            SubscriptionTier
+  period          SubscriptionPeriod
+  creditsPerMonth Int
+  creditsPerCycle Int
+  cycleMonths     Int
+  priceCents      Int?
+  currency        String             @default("BRL")
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  subscriptions OrganizationSubscription[]
+
+  @@unique([tier, period])
+  @@index([active, tier])
+}
+
+/// Assinatura contratada por uma cerimonialista. Valores de crédito e período
+/// são copiados do plano para preservar o histórico se o catálogo for alterado.
+model OrganizationSubscription {
+  id                     String             @id @default(cuid())
+  organizationId         String
+  planId                 String
+  status                 SubscriptionStatus @default(PENDING)
+  tier                   SubscriptionTier
+  period                 SubscriptionPeriod
+  creditsPerCycle        Int
+  cycleMonths            Int
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  canceledAt             DateTime?
+  /// Referência preparada para o provedor futuro; nunca é exigida no fluxo local.
+  providerSubscriptionId String?            @unique
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan          SubscriptionPlan    @relation(fields: [planId], references: [id], onDelete: Restrict)
+  creditEntries CreditLedgerEntry[]
+
+  @@index([organizationId, status])
+  @@index([status, currentPeriodEnd])
+}
+
+/// Saldo materializado para leituras rápidas. CreditLedgerEntry é a fonte de
+/// auditoria e toda mutação de saldo acontece na mesma transação do lançamento.
+model OrganizationCreditBalance {
+  organizationId String   @id
+  balance        Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+/// Livro-caixa imutável de créditos. Valores positivos concedem saldo e valores
+/// negativos consomem saldo. idempotencyKey bloqueia reentregas de webhooks e
+/// tentativas repetidas de ativar o mesmo casamento.
+model CreditLedgerEntry {
+  id             String                @id @default(cuid())
+  organizationId String
+  weddingId      String?
+  subscriptionId String?
+  purchaseId     String?               @unique
+  type           CreditLedgerEntryType
+  delta          Int
+  balanceAfter   Int
+  idempotencyKey String
+  description    String?
+  createdAt      DateTime              @default(now())
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wedding      Wedding?                  @relation(fields: [weddingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  subscription OrganizationSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  purchase     OneTimePurchase?          @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, idempotencyKey])
+  /// Um casamento consome no máximo um crédito em sua primeira ativação.
+  @@unique([organizationId, weddingId, type])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, type, createdAt])
+}
+
+/// Registro de uma intenção/compra avulsa. Sem gateway, permanece PENDING até
+/// uma integração autorizada concluir a compra e conceder o crédito.
+model OneTimePurchase {
+  id                String                @id @default(cuid())
+  organizationId    String
+  creditPackageId   String
+  status            OneTimePurchaseStatus @default(PENDING)
+  credits           Int
+  priceCents        Int?
+  currency          String                @default("BRL")
+  idempotencyKey    String
+  providerPaymentId String?               @unique
+  completedAt       DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creditPackage CreditPackage      @relation(fields: [creditPackageId], references: [id], onDelete: Restrict)
+  creditEntry   CreditLedgerEntry?
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, status, createdAt])
+}
+
+/// Catálogo extensível de funcionalidades comerciais. Ele já pode representar
+/// um template Premium, White Label ou serviço, sem acoplar isso ao gateway.
+model CommercialAddOn {
+  id          String              @id @default(cuid())
+  slug        String              @unique
+  name        String
+  description String?
+  kind        CommercialAddOnKind
+  templateId  String?             @unique
+  priceCents  Int?
+  currency    String              @default("BRL")
+  active      Boolean             @default(true)
+  metadata    Json?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  template     WeddingTemplate?          @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  entitlements OrganizationEntitlement[]
+
+  @@index([kind, active])
+}
+
+/// Direito concedido a uma organização após uma compra ou acordo comercial.
+/// Ele poderá ser consultado pelo painel antes de liberar White Label, serviços
+/// adicionais ou a escolha de um template Premium.
+model OrganizationEntitlement {
+  id                String            @id @default(cuid())
+  organizationId    String
+  commercialAddOnId String
+  status            EntitlementStatus @default(PENDING)
+  startsAt          DateTime?
+  endsAt            DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  commercialAddOn CommercialAddOn @relation(fields: [commercialAddOnId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, commercialAddOnId])
+  @@index([organizationId, status])
+}
+
+/// Overrides por casamento. Eles são mesclados na leitura e nunca alteram o template global.
+model WeddingCustomization {
+  id             String   @id @default(cuid())
+  organizationId String
+  weddingId      String   @unique
+  overrides      Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wedding      Wedding      @relation(fields: [weddingId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([id, weddingId, organizationId])
+  @@unique([weddingId, organizationId])
+  @@index([organizationId, weddingId])
+}
+
+model Guest {
+  id                   String   @id @default(cuid())
+  organizationId       String
+  weddingId            String
+  name                 String
+  /// Identificador de contato normalizado por casamento. Ele não é login e
+  /// não substitui o token opaco guardado no dispositivo.
+  email                String?
+  /// Opcional para não aumentar o atrito na entrada do casamento.
+  age                  Int?
+  relationshipToCouple String?
+  /// Referência privada no ObjectStorage; nunca uma URL pública persistida.
+  avatarStorageKey     String?
+  avatarContentType    String?
+  /// Token aleatório persistido no dispositivo; não é uma conta por e-mail.
+  token                String   @unique @default(cuid())
+  /// Cache do ranking. A fonte de auditoria é ScoreEntry, calculada pelo servidor.
+  score                Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wedding      Wedding      @relation(fields: [weddingId, organizationId], references: [id, organizationId], onDelete: Cascade)
   submissions  Submission[]
   photos       Photo[]
   scoreEntries ScoreEntry[]
 
-  @@index([status, eventDate])
-}
-
-model Guest {
-  id        String   @id @default(cuid())
-  weddingId String
-  name      String
-  /// Token aleatório persistido no dispositivo; não é uma conta por e-mail.
-  token     String   @unique @default(cuid())
-  /// Cache do ranking. A fonte de auditoria é ScoreEntry, calculada pelo servidor.
-  score     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  wedding      Wedding      @relation(fields: [weddingId], references: [id], onDelete: Cascade)
-  submissions  Submission[]
-  scoreEntries ScoreEntry[]
-
-  @@unique([id, weddingId])
-  @@index([weddingId, score(sort: Desc)])
+  @@unique([id, weddingId, organizationId])
+  @@unique([organizationId, weddingId, email])
+  @@index([organizationId, weddingId, score(sort: Desc)])
 }
 
 model Mission {
   id             String   @id @default(cuid())
+  organizationId String
   weddingId      String
   title          String
   description    String?
@@ -78,80 +470,108 @@ model Mission {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  wedding      Wedding      @relation(fields: [weddingId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wedding      Wedding      @relation(fields: [weddingId, organizationId], references: [id, organizationId], onDelete: Cascade)
   submissions  Submission[]
+  photos       Photo[]
   scoreEntries ScoreEntry[]
 
-  @@unique([id, weddingId])
-  @@unique([weddingId, displayOrder])
-  @@index([weddingId, active, displayOrder])
+  @@unique([id, weddingId, organizationId])
+  /// Dá a Photo e o ScoreEntry uma FK composta que assegura que convidado e
+  /// missão são exatamente os do envio referenciado.
+  @@unique([organizationId, weddingId, displayOrder])
+  @@index([organizationId, weddingId, active, displayOrder])
 }
 
 model Submission {
-  id           String           @id @default(cuid())
-  weddingId    String
-  guestId      String
-  missionId    String
+  id             String           @id @default(cuid())
+  organizationId String
+  weddingId      String
+  guestId        String
+  missionId      String
   /// Identificador idempotente criado pela fila IndexedDB no aparelho.
   clientUploadId String?
-  sequence     Int              @default(1)
-  status       SubmissionStatus @default(PENDING)
+  sequence       Int              @default(1)
+  status         SubmissionStatus @default(PENDING)
   /// Valor copiado da pontuação concedida, se houver; nunca vem do cliente.
-  scoreAwarded Int              @default(0)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  scoreAwarded   Int              @default(0)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
-  wedding    Wedding    @relation(fields: [weddingId], references: [id], onDelete: Cascade)
-  guest      Guest      @relation(fields: [guestId, weddingId], references: [id, weddingId], onDelete: Cascade)
-  mission    Mission    @relation(fields: [missionId, weddingId], references: [id, weddingId], onDelete: Cascade)
-  photo      Photo?
-  scoreEntry ScoreEntry?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wedding      Wedding      @relation(fields: [weddingId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  guest        Guest        @relation(fields: [guestId, weddingId, organizationId], references: [id, weddingId, organizationId], onDelete: Cascade)
+  mission      Mission      @relation(fields: [missionId, weddingId, organizationId], references: [id, weddingId, organizationId], onDelete: Cascade)
+  photo        Photo?
+  scoreEntry   ScoreEntry?
 
-  @@unique([id, weddingId])
-  @@unique([weddingId, clientUploadId])
+  @@unique([id, weddingId, organizationId])
+  @@unique([id, weddingId, organizationId, guestId, missionId])
+  @@unique([organizationId, weddingId, clientUploadId])
   @@unique([guestId, missionId, sequence])
-  @@index([weddingId, clientUploadId])
-  @@index([weddingId, status])
-  @@index([guestId, createdAt])
-  @@index([missionId, status])
+  @@index([organizationId, weddingId, clientUploadId])
+  @@index([organizationId, weddingId, status])
+  @@index([organizationId, guestId, createdAt])
+  @@index([organizationId, missionId, status])
 }
 
 model Photo {
-  id           String   @id @default(cuid())
-  weddingId    String
-  submissionId String   @unique
+  id                String                @id @default(cuid())
+  organizationId    String
+  weddingId         String
+  guestId           String
+  missionId         String
+  submissionId      String                @unique
   /// Chave privada no object storage; a URL assinada será criada no servidor futuramente.
-  storageKey   String   @unique
-  originalName String?
-  contentType  String
-  sizeBytes    Int
-  createdAt    DateTime @default(now())
+  storageKey        String                @unique
+  originalName      String?
+  contentType       String
+  sizeBytes         Int
+  moderationStatus  PhotoModerationStatus @default(PENDING)
+  moderationNote    String?
+  moderatedAt       DateTime?
+  moderatedByUserId String?
+  createdAt         DateTime              @default(now())
 
-  wedding    Wedding    @relation(fields: [weddingId], references: [id], onDelete: Cascade)
-  submission Submission @relation(fields: [submissionId, weddingId], references: [id, weddingId], onDelete: Cascade)
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wedding         Wedding      @relation(fields: [weddingId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  guest           Guest        @relation(fields: [guestId, weddingId, organizationId], references: [id, weddingId, organizationId], onDelete: Cascade)
+  mission         Mission      @relation(fields: [missionId, weddingId, organizationId], references: [id, weddingId, organizationId], onDelete: Cascade)
+  submission      Submission   @relation(fields: [submissionId, weddingId, organizationId, guestId, missionId], references: [id, weddingId, organizationId, guestId, missionId], onDelete: Cascade)
+  moderatedByUser User?        @relation("PhotoModeratedBy", fields: [moderatedByUserId], references: [id], onDelete: SetNull)
 
-  @@unique([submissionId, weddingId])
-  @@index([weddingId, createdAt])
+  @@unique([submissionId, weddingId, organizationId])
+  @@unique([submissionId, weddingId, organizationId, guestId, missionId])
+  @@index([organizationId, weddingId, moderationStatus, createdAt])
+  @@index([organizationId, weddingId, guestId, missionId])
+  @@index([organizationId, weddingId, createdAt])
 }
 
 model ScoreEntry {
-  id           String   @id @default(cuid())
-  weddingId    String
-  guestId      String
-  missionId    String
-  submissionId String   @unique
-  points       Int
-  createdAt    DateTime @default(now())
+  id             String           @id @default(cuid())
+  organizationId String
+  weddingId      String
+  guestId        String
+  missionId      String
+  submissionId   String           @unique
+  points         Int
+  source         ScoreEntrySource @default(MISSION_COMPLETION)
+  /// Contexto legível para lançamentos futuros; o envio e a missão continuam
+  /// sendo a origem auditável do fluxo normal.
+  reason         String?
+  createdAt      DateTime         @default(now())
 
-  wedding    Wedding    @relation(fields: [weddingId], references: [id], onDelete: Cascade)
-  guest      Guest      @relation(fields: [guestId, weddingId], references: [id, weddingId], onDelete: Cascade)
-  mission    Mission    @relation(fields: [missionId, weddingId], references: [id, weddingId], onDelete: Cascade)
-  submission Submission @relation(fields: [submissionId, weddingId], references: [id, weddingId], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wedding      Wedding      @relation(fields: [weddingId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  guest        Guest        @relation(fields: [guestId, weddingId, organizationId], references: [id, weddingId, organizationId], onDelete: Cascade)
+  mission      Mission      @relation(fields: [missionId, weddingId, organizationId], references: [id, weddingId, organizationId], onDelete: Cascade)
+  submission   Submission   @relation(fields: [submissionId, weddingId, organizationId, guestId, missionId], references: [id, weddingId, organizationId, guestId, missionId], onDelete: Cascade)
 
-  @@unique([id, weddingId])
+  @@unique([id, weddingId, organizationId])
   /// Impede pontos duplicados para a mesma missão, mesmo que ela aceite várias fotos.
   @@unique([guestId, missionId])
-  @@unique([submissionId, weddingId])
-  @@index([weddingId, points])
-  @@index([weddingId, guestId])
+  @@unique([submissionId, weddingId, organizationId])
+  @@unique([submissionId, weddingId, organizationId, guestId, missionId])
+  @@index([organizationId, weddingId, points])
+  @@index([organizationId, weddingId, guestId])
 }

@@ -21,22 +21,31 @@ async function main() {
       submissions: {
         select: {
           weddingId: true,
-          guest: { select: { weddingId: true } },
-          mission: { select: { weddingId: true } },
+          organizationId: true,
+          guest: { select: { weddingId: true, organizationId: true } },
+          mission: { select: { weddingId: true, organizationId: true } },
         },
       },
       photos: {
         select: {
+          guestId: true,
+          missionId: true,
           weddingId: true,
-          submission: { select: { weddingId: true } },
+          organizationId: true,
+          guest: { select: { id: true, weddingId: true, organizationId: true } },
+          mission: { select: { id: true, weddingId: true, organizationId: true } },
+          submission: { select: { guestId: true, missionId: true, weddingId: true, organizationId: true } },
         },
       },
       scoreEntries: {
         select: {
+          guestId: true,
+          missionId: true,
           weddingId: true,
-          guest: { select: { weddingId: true } },
-          mission: { select: { weddingId: true } },
-          submission: { select: { weddingId: true } },
+          organizationId: true,
+          guest: { select: { weddingId: true, organizationId: true } },
+          mission: { select: { weddingId: true, organizationId: true } },
+          submission: { select: { guestId: true, missionId: true, weddingId: true, organizationId: true } },
         },
       },
     },
@@ -51,17 +60,36 @@ async function main() {
       (submission) =>
         submission.weddingId !== wedding.id ||
         submission.guest.weddingId !== wedding.id ||
-        submission.mission.weddingId !== wedding.id,
+        submission.mission.weddingId !== wedding.id ||
+        submission.organizationId !== wedding.organizationId ||
+        submission.guest.organizationId !== wedding.organizationId ||
+        submission.mission.organizationId !== wedding.organizationId,
     );
     const invalidPhoto = wedding.photos.some(
-      (photo) => photo.weddingId !== wedding.id || photo.submission.weddingId !== wedding.id,
+      (photo) =>
+        photo.weddingId !== wedding.id ||
+        photo.submission.weddingId !== wedding.id ||
+        photo.guest.weddingId !== wedding.id ||
+        photo.mission.weddingId !== wedding.id ||
+        photo.organizationId !== wedding.organizationId ||
+        photo.submission.organizationId !== wedding.organizationId ||
+        photo.guest.organizationId !== wedding.organizationId ||
+        photo.mission.organizationId !== wedding.organizationId ||
+        photo.guestId !== photo.submission.guestId ||
+        photo.missionId !== photo.submission.missionId,
     );
     const invalidScoreEntry = wedding.scoreEntries.some(
       (entry) =>
         entry.weddingId !== wedding.id ||
         entry.guest.weddingId !== wedding.id ||
         entry.mission.weddingId !== wedding.id ||
-        entry.submission.weddingId !== wedding.id,
+        entry.submission.weddingId !== wedding.id ||
+        entry.organizationId !== wedding.organizationId ||
+        entry.guest.organizationId !== wedding.organizationId ||
+        entry.mission.organizationId !== wedding.organizationId ||
+        entry.submission.organizationId !== wedding.organizationId ||
+        entry.guestId !== entry.submission.guestId ||
+        entry.missionId !== entry.submission.missionId,
     );
 
     return invalidSubmission || invalidPhoto || invalidScoreEntry;

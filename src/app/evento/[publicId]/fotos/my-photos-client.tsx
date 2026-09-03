@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { EventView } from "@/features/event/types";
 import { getLocalGuestToken } from "@/lib/guest/local-guest";
 import { deleteQueuedPhoto, listQueuedPhotos } from "@/lib/offline/photo-queue";
 import type { QueuedPhotoUpload } from "@/lib/offline/types";
 import { uploadPendingPhotos, uploadQueuedPhoto, type UploadAttemptResult } from "@/lib/offline/upload-queue";
+import { visualConfigToCssVariables } from "@/lib/templates/wedding-visual-config";
 
 type LocalPhoto = QueuedPhotoUpload & { previewUrl: string };
 
@@ -135,9 +136,9 @@ export function MyPhotosClient({ event }: { event: EventView }) {
   }
 
   return (
-    <main className="my-photos-screen">
+    <main className="my-photos-screen wedding-themed" style={visualConfigToCssVariables(event.visual) as CSSProperties}>
       <header className="photos-header">
-        <Link className="back-link" href={`/evento/${encodeURIComponent(event.identifier)}/jogo`}>← Jogo</Link>
+        <Link className="back-link" href={`${event.publicPath}/jogo`}>← Jogo</Link>
         <p className="game-event-name">{event.brideName} &amp; {event.groomName}</p>
         <h1>Minhas fotos</h1>
         <p>Você pode guardar várias fotos por missão. Os pontos da missão contam apenas uma vez.</p>
@@ -152,7 +153,7 @@ export function MyPhotosClient({ event }: { event: EventView }) {
           <span aria-hidden="true">📷</span>
           <h2>Nenhuma foto ainda</h2>
           <p>Quando você confirmar uma foto em uma missão, ela aparecerá aqui aguardando envio.</p>
-          <Link href={`/evento/${encodeURIComponent(event.identifier)}/jogo`}>Ver missões</Link>
+          <Link href={`${event.publicPath}/jogo`}>Ver missões</Link>
         </section>
       ) : null}
 

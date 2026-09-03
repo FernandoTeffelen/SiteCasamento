@@ -6,6 +6,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ide
     const [{ identifier }, body] = await Promise.all([params, readJsonBody(request)]);
     const result = await registerOrIdentifyGuest(identifier, {
       name: body.name,
+      email: body.email,
       guestToken: body.guestToken,
     });
 

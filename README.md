@@ -1,109 +1,103 @@
-# Jogo de Fotos para Casamentos
+# SiteCasamento
 
-Web app mobile-first para convidados participarem de missões fotográficas por
-QR Code. A interface identifica o convidado, busca missões e envia fotos reais
-com uma fila local tolerante a falhas de conexão.
+Aplicação mobile-first para convidados participarem de missões fotográficas em casamentos, acessada por QR Code ou link. O mesmo projeto Next.js reúne o site comercial, o site privado de cada casamento e a base do painel administrativo.
 
-## Tecnologias
+## Arquitetura dos ambientes
 
-- Next.js 16, React 19 e TypeScript
-- CSS puro, com layout mobile-first e suporte a áreas seguras do iPhone
-- PostgreSQL e Prisma 7 com adaptador `pg`
-- PostgreSQL 16 em Docker Compose para desenvolvimento local
-- Manifesto web preparado para a futura PWA
-- Object storage local no desenvolvimento e adaptador S3 compatível para R2,
-  Amazon S3 ou MinIO em produção
+| Área | Rotas principais | Acesso |
+| --- | --- | --- |
+| Comercial | `/`, `/planos` | Público |
+| Casamento | `/w/{token}`, `/w/{token}/jogo`, `/w/{token}/fotos` | Token público não enumerável e janela do evento |
+| Administrativo | `/app/login`, `/app` | Usuária da cerimonialista com e-mail e senha |
 
-## Instalação e banco local
+As rotas `/api` são Route Handlers do próprio Next.js; não existe um backend separado para hospedar. O identificador público do casamento é um token opaco (`Wedding.publicId`), nunca o ID interno nem um slug previsível. Links antigos em `/evento/{token}` apenas redirecionam para `/w/{token}`.
 
-Pré-requisitos: Node.js 20.9 ou posterior e Docker Desktop.
+## Stack
 
-1. Instale as dependências: `npm install`.
-2. Copie `.env.example` para `.env`. A configuração local usa a porta `5433`
-   para não conflitar com outro PostgreSQL na porta padrão.
-3. Inicie o PostgreSQL local: `npm run db:up`.
-4. Aplique as migrations existentes: `npm run db:deploy`.
-5. Insira os dados fictícios: `npm run db:seed`.
-6. Teste a conexão e o isolamento dos eventos: `npm run db:check`.
-7. Inicie o projeto: `npm run dev`.
+- Next.js (App Router), React e TypeScript estrito;
+- PostgreSQL com Prisma como única camada de acesso ao banco;
+- `ObjectStorage` para fotos (local em desenvolvimento e S3-compatible em produção);
+- Vitest para testes.
 
-Abra `http://localhost:3000` no navegador. Para validar o projeto, execute
-`npm run lint`, `npm run typecheck`, `npm test` e `npm run build`.
+## Banco de dados e migrations
 
-Para criar uma migration durante o desenvolvimento, depois de editar
-`prisma/schema.prisma`, use `npm run db:migrate -- --name descricao_da_mudanca`.
-Para interromper o banco local sem apagar os dados, use `npm run db:stop`.
+O banco é PostgreSQL de verdade, não SQLite nem memória. O modelo está em [`prisma/schema.prisma`](prisma/schema.prisma) e as alterações versionadas em [`prisma/migrations`](prisma/migrations). Ele contém organizações/cerimonialistas, usuários, casamentos, convidados, missões, fotos, pontuação, templates, créditos e assinaturas.
 
-Em produção, use um PostgreSQL gerenciado e defina a `DATABASE_URL` do provedor.
-O deploy deve executar `npm run db:deploy`; não execute o seed de demonstração.
+No desenvolvimento desta cópia, `DATABASE_URL` aponta para `localhost:5433`, banco `site_casamento`. Os arquivos do cluster ficam em `.local-postgres-data/`, fora do código e ignorados pelo Git. Isso é apenas um banco local: não fica disponível na internet e não deve ser usado como banco de produção.
 
-## Fotos e armazenamento
+### Rodar localmente
 
-Antes de uma tentativa de upload, a foto original é salva no IndexedDB do
-navegador. Enquanto a página estiver aberta, a fila tenta itens pendentes ao
-abrir o jogo, ao recuperar conexão e ao voltar para a tela. Isso não depende de
-Background Sync, que não é confiável no Safari. Fotos com falha permanecem no
-aparelho e podem ser reenviadas em **Minhas fotos**.
-
-No desenvolvimento, use `STORAGE_DRIVER="local"`: os arquivos vão para
-`.local-storage/`, ignorado pelo Git. Para R2, S3 ou MinIO, altere para
-`STORAGE_DRIVER="s3-compatible"` e preencha as variáveis `S3_*` documentadas
-em `.env.example`. O bucket deve ficar privado; URLs de leitura assinadas serão
-criadas junto do futuro álbum/painel autorizado.
-
-O servidor aceita JPEG, PNG, WebP e HEIC/HEIF, valida a assinatura do arquivo
-e limita cada upload a 15 MB por padrão (`MAX_UPLOAD_BYTES`). A chave enviada
-pela fila é idempotente: repetir uma solicitação após queda de rede não cria
-uma segunda foto nem concede pontos novamente.
-
-## Estrutura
-
-```
-compose.yaml             PostgreSQL local em Docker
-prisma/                  schema, migrations, seed e verificação do banco
-public/                  arquivos estáticos e manifesto PWA
-src/app/                 rotas, layout e estilos globais do Next.js
-src/features/            módulos por domínio de negócio (futuros)
-src/lib/offline/         fila de fotos em IndexedDB
-src/lib/storage/         abstração de object storage
-src/server/db/           cliente Prisma exclusivo do servidor
-src/server/storage/      adaptadores local e S3 compatível
-src/server/uploads/      validação e orquestração de upload
-AGENTS.md                regras de desenvolvimento do projeto
+```bash
+npm install
+# configure DATABASE_URL em .env
+npm run db:deploy
+npm run db:generate
+npm run db:seed       # somente desenvolvimento/demo
+npm run db:check
+npm run dev
 ```
 
-## Modelo de dados
+Se o PostgreSQL estiver em outro host/porta, altere somente `DATABASE_URL`. Nunca faça reset do banco de produção; use `npm run db:deploy`, que aplica migrations pendentes sem apagar dados.
 
-`Wedding` é o limite de isolamento: todo convidado, missão, envio, foto e
-lançamento de pontos referencia o casamento. Relações compostas impedem que um
-envio una convidado e missão de eventos diferentes. `Submission` representa o
-envio; `Photo` armazena somente metadados e a chave privada do object storage;
-`ScoreEntry` é o registro auditável de pontos. O campo `Guest.score` é um cache
-para ranking, que deverá ser atualizado pelo servidor em transação com o
-lançamento de pontos.
+## Deploy com frontend e backend no mesmo link
 
-`prisma/seed.ts` cria dois eventos isolados: `ana-e-joao` e
-`beatriz-e-rafael`, cada um com convidados, missões, envios, fotos de referência
-e pontos próprios. Esses identificadores legíveis existem somente para
-demonstração; novos eventos recebem um identificador público opaco. O seed
-substitui apenas os dois eventos fictícios.
+O caminho mais simples é hospedar o repositório em Vercel (ou outro host que execute Next.js) e usar um PostgreSQL gerenciado, como Neon, Supabase, Railway, Render ou RDS. O provedor de hospedagem fornece uma única URL para páginas e APIs.
 
-## API inicial
+1. Suba o projeto para um repositório Git e importe-o no host Next.js.
+2. Crie um PostgreSQL gerenciado e copie a `DATABASE_URL` (com SSL quando exigido). Para migrations, prefira a URL direta do provedor; poolers podem ser usados pela aplicação quando o provedor recomendar.
+3. Configure no ambiente de produção:
 
-As rotas abaixo são usadas pela interface e mantêm o escopo do casamento no
-servidor. O campo de pontos do cliente não é recebido por nenhuma rota.
+   ```text
+   DATABASE_URL=postgresql://...
+   STORAGE_DRIVER=s3-compatible
+   S3_ENDPOINT=https://...
+   S3_REGION=...
+   S3_BUCKET=...
+   S3_ACCESS_KEY_ID=...
+   S3_SECRET_ACCESS_KEY=...
+   MAX_UPLOAD_BYTES=15728640
+   ```
 
-- `GET /api/events/[slug-ou-token]`: localiza o casamento.
-- `POST /api/events/[slug-ou-token]/guests`: cria ou identifica um convidado.
-- `GET /api/events/[slug-ou-token]/missions?guestToken=...`: lista as missões do convidado.
-- `POST /api/events/[slug-ou-token]/missions/[missionId]/submissions`: recebe
-  `multipart/form-data` com `photo`, `guestToken` e `uploadId`; armazena a foto
-  e só então registra a pontuação.
-- `DELETE /api/events/[slug-ou-token]/missions/[missionId]/submissions/[submissionId]`:
-  remove um envio do próprio convidado e recalcula seu placar.
-- `GET /api/events/[slug-ou-token]/guests/me?guestToken=...`: consulta o placar.
-- `GET /api/events/[slug-ou-token]/ranking`: consulta o ranking isolado do evento.
+   O bucket deve ser privado. Não publique `.env`, chaves ou credenciais.
+4. Execute uma vez, apontando para o banco de produção, `npm run db:deploy` (ou `npx prisma migrate deploy`). Não execute `db:seed` em produção: o seed recria dados de demonstração.
+5. Configure o build como `npm run build`. Em hosts que exigem comando de start, use `npm run start` após o build. No Vercel, o adaptador Next.js faz isso automaticamente.
+6. Abra a URL gerada e teste uma página comercial, uma rota `/w/{token}` e uma chamada `/api`. O backend já está no mesmo deploy.
 
-`npm test` cria eventos temporários no PostgreSQL e verifica isolamento por
-casamento, identificação de convidado, pontuação única, falha de storage,
-reenvio idempotente e validação de arquivo.
+O armazenamento local (`STORAGE_DRIVER=local` e `.local-storage/`) não é adequado para Vercel/serverless, pois pode ser efêmero. Em produção use R2, S3 ou outro storage compatível e mantenha o bucket privado.
+
+## Links e ciclo de vida do casamento
+
+Um link público tem o formato `https://seu-dominio/w/{publicId}`. Ele só funciona quando o casamento está ativo e dentro de `publicAccessStartsAt`/`publicAccessEndsAt`; depois do fim, convidados perdem acesso, mas os dados continuam no banco para o painel. O `publicId` deve ser gerado de forma opaca e compartilhado pelo QR Code.
+
+## Painel administrativo
+
+O login inicial está em `/app/login`. Não existe senha padrão nem cadastro público: a senha deve ser provisionada de forma segura pelo serviço de autenticação (`setAdminPassword`). As telas administrativas completas ainda serão construídas, mas a sessão, proteção da rota e isolamento por organização já estão preparados.
+
+## Créditos e pagamentos
+
+A estrutura de planos recorrentes, créditos avulsos, saldo, histórico e consumo idempotente já existe no banco e nos serviços. Gateway de pagamento, cobrança real, templates Premium e White Label ainda não estão conectados a um provedor.
+
+## Fotos, pontuação e testes
+
+O servidor valida MIME/tamanho, vincula foto a casamento, convidado e missão, registra moderação futura e concede pontos uma única vez por origem. O ranking é separado por casamento. Para validar antes de publicar:
+
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
+npm run db:check
+```
+
+## Estrutura resumida
+
+```text
+src/app/              páginas, layouts e APIs Next.js
+src/features/         domínios de convidados, jogo e casamento
+src/server/           Prisma, autenticação, billing e regras de negócio
+src/lib/              contratos e utilitários compartilhados
+prisma/schema.prisma  modelo PostgreSQL
+prisma/migrations/    histórico do schema
+```
+
+Consulte [`notas.txt`](notas.txt) para o passo a passo operacional de deploy e banco.

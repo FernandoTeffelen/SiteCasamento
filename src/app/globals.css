@@ -15,6 +15,91 @@ button, input, textarea, select { font: inherit; }
 
 button { -webkit-tap-highlight-color: transparent; }
 
+/* Valores recebidos de um template ou de um override validado do casamento. */
+.wedding-themed {
+  background: var(--wedding-background);
+  color: var(--wedding-text);
+  font-family: var(--wedding-body-font);
+}
+
+.commercial-page,
+.admin-auth-page,
+.admin-app-page {
+  min-height: 100dvh;
+  padding: max(2rem, env(safe-area-inset-top)) 1.25rem max(2rem, env(safe-area-inset-bottom));
+  color: #3e2528;
+  background: #fffaf8;
+}
+
+.commercial-page section,
+.admin-auth-page form,
+.admin-app-page > header,
+.admin-app-page > section {
+  width: min(100%, 42rem);
+  margin-inline: auto;
+  padding: 1.5rem;
+  border: 1px solid #f0d9d5;
+  border-radius: 1.25rem;
+  background: #fff;
+  box-shadow: 0 0.75rem 2rem rgba(85, 42, 46, 0.08);
+}
+
+.commercial-page h1,
+.admin-auth-page h1,
+.admin-app-page h1 { margin: 0.25rem 0 1rem; }
+
+.commercial-page a,
+.admin-auth-page a,
+.admin-auth-page button,
+.admin-app-page button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  margin: 0.75rem 0.5rem 0 0;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 0.75rem;
+  color: #fff;
+  background: #a95954;
+  font: inherit;
+  text-decoration: none;
+}
+
+.admin-auth-page label,
+.admin-auth-page input { display: block; width: 100%; }
+.admin-auth-page label { margin-top: 1rem; font-weight: 700; }
+.admin-auth-page input { min-height: 2.75rem; margin-top: 0.4rem; padding-inline: 0.75rem; border: 1px solid #d8b9b5; border-radius: 0.75rem; }
+.admin-app-page > section { margin-top: 1rem; }
+
+.wedding-themed h1,
+.wedding-themed .welcome-title { font-family: var(--wedding-heading-font); }
+.wedding-themed .event-kicker,
+.wedding-themed .game-event-name,
+.wedding-themed .section-kicker { color: var(--wedding-primary); }
+.wedding-themed h1,
+.wedding-themed .section-heading h2,
+.wedding-themed .mission-card h3,
+.wedding-themed .photos-header h1 { color: var(--wedding-text); }
+.wedding-themed h1 span { color: var(--wedding-accent); }
+.wedding-themed .welcome-description,
+.wedding-themed .photos-header > p:last-child,
+.wedding-themed .mission-card > p { color: var(--wedding-muted-text); }
+.wedding-themed .entry-form button,
+.wedding-themed .score-card,
+.wedding-themed .use-photo-button,
+.wedding-themed .close-photo-viewer,
+.wedding-themed .profile-save,
+.wedding-themed .empty-photos a { background: var(--wedding-primary); color: var(--wedding-primary-foreground); }
+.wedding-themed .mission-action button,
+.wedding-themed .photos-shortcut,
+.wedding-themed .back-link { color: var(--wedding-primary); }
+.wedding-themed .mission-action button { border-color: color-mix(in srgb, var(--wedding-primary) 25%, white); background: var(--wedding-surface); }
+.wedding-themed .mission-action > span strong { color: var(--wedding-primary); }
+.wedding-themed .mission-count,
+.wedding-themed .guest-avatar,
+.wedding-themed .profile-avatar-preview { color: var(--wedding-primary); background: color-mix(in srgb, var(--wedding-primary) 12%, white); }
+
 .welcome-screen {
   isolation: isolate;
   position: relative;
@@ -38,6 +123,25 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .welcome-header { text-align: center; }
+
+.welcome-cover {
+  display: block;
+  width: 100%;
+  max-height: 11rem;
+  margin: 0 auto 1.25rem;
+  border-radius: 1.25rem;
+  object-fit: cover;
+}
+
+.welcome-logo {
+  display: block;
+  width: auto;
+  max-width: 8rem;
+  height: auto;
+  max-height: 4.5rem;
+  margin: 0 auto 1rem;
+  object-fit: contain;
+}
 
 .monogram {
   display: grid;
@@ -259,8 +363,220 @@ h1 span { color: #bf756d; }
   border-radius: 50%;
   background: #f7e6e2;
   color: #9e504c;
+  cursor: pointer;
   font-size: 1rem;
   font-weight: 800;
+  overflow: hidden;
+  padding: 0;
+}
+
+.guest-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.guest-avatar:focus-visible {
+  outline: 3px solid #3d292a;
+  outline-offset: 3px;
+}
+
+.profile-overlay {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(43 27 29 / 62%);
+  padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
+}
+
+.profile-sheet {
+  width: min(100%, 32rem);
+  max-height: calc(100dvh - 2rem - env(safe-area-inset-bottom));
+  overflow: auto;
+  border-radius: 1.4rem;
+  background: #fffaf8;
+  box-shadow: 0 20px 60px rgb(30 16 17 / 30%);
+  padding: 1.25rem;
+}
+
+.profile-sheet-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.profile-sheet-heading p {
+  margin: 0 0 0.2rem;
+  color: #a05b56;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.profile-sheet-heading h2 {
+  margin: 0;
+  color: #3e2528;
+  font-size: 1.4rem;
+  letter-spacing: -0.045em;
+}
+
+.profile-sheet-heading > button {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f4e6e3;
+  color: #704d4d;
+  cursor: pointer;
+  font-size: 1.5rem;
+}
+
+.profile-form {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+}
+
+.profile-form > label {
+  margin-top: 0.65rem;
+  color: #5a4244;
+  font-size: 0.875rem;
+  font-weight: 750;
+}
+
+.profile-form > label span {
+  color: #977f7e;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.profile-form > input,
+.profile-form > textarea {
+  width: 100%;
+  border: 1px solid #dfc7c4;
+  border-radius: 0.8rem;
+  outline: none;
+  background: #fff;
+  padding: 0.85rem 0.95rem;
+  color: #342224;
+  line-height: 1.35;
+}
+
+.profile-form > input { min-height: 3rem; }
+.profile-form > textarea { resize: vertical; }
+
+.profile-form > input:focus,
+.profile-form > textarea:focus {
+  border-color: #bd716a;
+  box-shadow: 0 0 0 4px rgb(189 113 106 / 16%);
+}
+
+.profile-avatar-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  border: 1px solid #f0dfdb;
+  border-radius: 1rem;
+  background: #fff;
+  padding: 0.8rem;
+}
+
+.profile-avatar-preview {
+  display: grid;
+  width: 4.25rem;
+  height: 4.25rem;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #f7e6e2;
+  color: #9e504c;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.profile-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-editor > div:last-child { min-width: 0; }
+
+.profile-avatar-editor p {
+  margin: 0.35rem 0 0;
+  color: #907c7c;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.profile-photo-picker,
+.profile-remove-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.45rem;
+  border: 1px solid #e4c8c4;
+  border-radius: 0.65rem;
+  background: #fff9f7;
+  padding: 0 0.7rem;
+  color: #98534e;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.profile-photo-picker input { display: none; }
+
+.profile-remove-avatar {
+  margin-left: 0.35rem;
+  border-color: transparent;
+  background: transparent;
+  color: #a23d39;
+}
+
+.profile-error {
+  margin: 0.35rem 0 0;
+  color: #a23d39;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.profile-save,
+.profile-cancel {
+  width: 100%;
+  min-height: 3.25rem;
+  border-radius: 0.8rem;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.profile-save {
+  margin-top: 0.8rem;
+  border: 0;
+  background: #a95954;
+  color: #fff;
+}
+
+.profile-cancel {
+  border: 1px solid #e5c9c5;
+  background: #fff;
+  color: #99524d;
+}
+
+.profile-sheet button:disabled,
+.profile-form input:disabled,
+.profile-form textarea:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .score-card {

@@ -16,7 +16,12 @@ export function getLocalGuestToken(eventPublicId: string) {
   return localStorage.getItem(`${getGuestNameKey(eventPublicId)}:token`) ?? "";
 }
 
-export function saveLocalGuest(eventPublicId: string, guest: { name: string; token: string }) {
+export function getLocalGuestEmail(eventPublicId: string) {
+  return localStorage.getItem(`${getGuestNameKey(eventPublicId)}:email`)?.trim() ?? "";
+}
+
+export function saveLocalGuest(eventPublicId: string, guest: { name: string; email?: string | null; token: string }) {
   saveLocalGuestName(eventPublicId, guest.name);
   localStorage.setItem(`${getGuestNameKey(eventPublicId)}:token`, guest.token);
+  if (guest.email) localStorage.setItem(`${getGuestNameKey(eventPublicId)}:email`, guest.email);
 }

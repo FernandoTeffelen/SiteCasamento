@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 240" role="img" aria-label="Template Romance clássico">
+  <rect width="400" height="240" fill="#fffaf8"/>
+  <circle cx="335" cy="28" r="88" fill="#f4dbd3"/>
+  <circle cx="45" cy="230" r="78" fill="#f5e6ce"/>
+  <text x="200" y="102" fill="#3e2528" font-family="Georgia, serif" font-size="32" text-anchor="middle">Ana &amp; João</text>
+  <text x="200" y="132" fill="#a95954" font-family="Arial, sans-serif" font-size="12" letter-spacing="3" text-anchor="middle">NOSSO CASAMENTO</text>
+  <rect x="122" y="165" width="156" height="34" rx="17" fill="#a95954"/>
+  <text x="200" y="187" fill="#fff" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle">ENTRAR NO JOGO</text>
+</svg>

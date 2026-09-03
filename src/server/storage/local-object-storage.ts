@@ -1,4 +1,4 @@
-import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ObjectStorage, StoredObject, UploadObjectInput } from "@/lib/storage/types";
 
@@ -35,6 +35,11 @@ export class LocalObjectStorage implements ObjectStorage {
     }
 
     return { storageKey: input.storageKey };
+  }
+
+  async get(storageKey: string) {
+    const body = await readFile(resolveStoragePath(this.rootDirectory, storageKey));
+    return { body, contentType: "application/octet-stream" };
   }
 
   getPublicUrl(storageKey: string) {

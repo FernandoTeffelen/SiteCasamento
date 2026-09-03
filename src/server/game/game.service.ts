@@ -1,6 +1,6 @@
 import { prisma } from "@/server/db/prisma";
 import { DomainError } from "@/server/domain/error";
-import { assertWeddingIsActive, findWeddingByIdentifier } from "@/server/events/wedding.service";
+import { assertWeddingIsActive, findWeddingByPublicAccessToken } from "@/server/events/wedding.service";
 import { getGuestContext } from "@/server/guests/guest.service";
 
 export type GuestMission = {
@@ -28,7 +28,7 @@ export async function listGuestMissions(eventIdentifier: string, rawGuestToken: 
 
   const [missions, scoreEntries, submissionCounts] = await Promise.all([
     prisma.mission.findMany({
-      where: { weddingId: wedding.id, active: true },
+      where: { organizationId: wedding.organizationId, weddingId: wedding.id, active: true },
       orderBy: { displayOrder: "asc" },
       select: {
         id: true,
@@ -40,12 +40,12 @@ export async function listGuestMissions(eventIdentifier: string, rawGuestToken: 
       },
     }),
     prisma.scoreEntry.findMany({
-      where: { weddingId: wedding.id, guestId: guest.id },
+      where: { organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id },
       select: { missionId: true },
     }),
     prisma.submission.groupBy({
       by: ["missionId"],
-      where: { weddingId: wedding.id, guestId: guest.id },
+      where: { organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id },
       _count: { _all: true },
     }),
   ]);
@@ -68,25 +68,34 @@ export async function getGuestScore(eventIdentifier: string, rawGuestToken: unkn
   const guestToken = validateGuestToken(rawGuestToken);
   const { wedding, guest } = await getGuestContext(eventIdentifier, guestToken);
   const aggregate = await prisma.scoreEntry.aggregate({
-    where: { weddingId: wedding.id, guestId: guest.id },
+    where: { organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id },
     _sum: { points: true },
   });
   const score = aggregate._sum.points ?? 0;
 
   return {
     wedding,
-    guest: { id: guest.id, name: guest.name, token: guest.token },
+    guest: {
+      id: guest.id,
+      name: guest.name,
+      email: guest.email,
+      token: guest.token,
+      age: guest.age,
+      relationshipToCouple: guest.relationshipToCouple,
+      hasAvatar: guest.hasAvatar,
+      updatedAt: guest.updatedAt,
+    },
     score,
   };
 }
 
 export async function getEventRanking(eventIdentifier: string, rawLimit?: string | null) {
-  const wedding = await findWeddingByIdentifier(eventIdentifier);
+  const wedding = await findWeddingByPublicAccessToken(eventIdentifier);
   assertWeddingIsActive(wedding);
   const requestedLimit = Number(rawLimit ?? 20);
   const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 20;
   const guests = await prisma.guest.findMany({
-    where: { weddingId: wedding.id },
+    where: { organizationId: wedding.organizationId, weddingId: wedding.id },
     orderBy: [{ score: "desc" }, { createdAt: "asc" }],
     take: limit,
     select: { id: true, name: true, score: true },

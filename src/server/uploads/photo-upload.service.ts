@@ -1,4 +1,4 @@
-import { Prisma, SubmissionStatus } from "@/generated/prisma/client";
+import { Prisma, ScoreEntrySource, SubmissionStatus } from "@/generated/prisma/client";
 import type { ObjectStorage } from "@/lib/storage/types";
 import { prisma } from "@/server/db/prisma";
 import { DomainError } from "@/server/domain/error";
@@ -155,6 +155,7 @@ type PreparedSubmission = {
 };
 
 async function prepareSubmission(input: {
+  organizationId: string;
   weddingId: string;
   guestId: string;
   missionId: string;
@@ -162,13 +163,13 @@ async function prepareSubmission(input: {
 }) : Promise<PreparedSubmission> {
   return withTransactionRetry(() => prisma.$transaction(async (transaction) => {
     const mission = await transaction.mission.findFirst({
-      where: { id: input.missionId, weddingId: input.weddingId, active: true },
+      where: { id: input.missionId, organizationId: input.organizationId, weddingId: input.weddingId, active: true },
       select: { id: true, maxSubmissions: true },
     });
     if (!mission) throw new DomainError("MISSION_NOT_FOUND", 404, "Missão não encontrada neste casamento.");
 
     const existing = await transaction.submission.findFirst({
-      where: { weddingId: input.weddingId, clientUploadId: input.clientUploadId },
+      where: { organizationId: input.organizationId, weddingId: input.weddingId, clientUploadId: input.clientUploadId },
       select: { id: true, guestId: true, missionId: true, status: true },
     });
 
@@ -193,6 +194,7 @@ async function prepareSubmission(input: {
     // duplicar pontos quando o convidado atualizar o navegador.
     const legacySubmission = await transaction.submission.findFirst({
       where: {
+        organizationId: input.organizationId,
         weddingId: input.weddingId,
         guestId: input.guestId,
         missionId: input.missionId,
@@ -212,6 +214,7 @@ async function prepareSubmission(input: {
 
     const activeSubmissionCount = await transaction.submission.count({
       where: {
+        organizationId: input.organizationId,
         weddingId: input.weddingId,
         guestId: input.guestId,
         missionId: input.missionId,
@@ -223,10 +226,11 @@ async function prepareSubmission(input: {
     }
 
     const sequenceCount = await transaction.submission.count({
-      where: { weddingId: input.weddingId, guestId: input.guestId, missionId: input.missionId },
+      where: { organizationId: input.organizationId, weddingId: input.weddingId, guestId: input.guestId, missionId: input.missionId },
     });
     const submission = await transaction.submission.create({
       data: {
+        organizationId: input.organizationId,
         weddingId: input.weddingId,
         guestId: input.guestId,
         missionId: input.missionId,
@@ -252,6 +256,7 @@ async function markUploadFailed(submissionId: string) {
 }
 
 async function finalizeSubmission(input: {
+  organizationId: string;
   weddingId: string;
   guestId: string;
   missionId: string;
@@ -262,16 +267,25 @@ async function finalizeSubmission(input: {
 }) {
   return withTransactionRetry(() => prisma.$transaction(async (transaction) => {
     const submission = await transaction.submission.findFirst({
-      where: { id: input.submissionId, weddingId: input.weddingId, guestId: input.guestId, missionId: input.missionId },
+      where: { id: input.submissionId, organizationId: input.organizationId, weddingId: input.weddingId, guestId: input.guestId, missionId: input.missionId },
       select: { id: true, status: true, scoreAwarded: true },
     });
     if (!submission) throw new DomainError("SUBMISSION_NOT_FOUND", 404, "Envio não encontrado neste casamento.");
 
     const storageKey = buildStorageKey(input.weddingId, input.guestId, input.missionId, input.submissionId);
     await transaction.photo.upsert({
-      where: { submissionId: input.submissionId },
+      where: {
+        submissionId_weddingId_organizationId: {
+          submissionId: input.submissionId,
+          weddingId: input.weddingId,
+          organizationId: input.organizationId,
+        },
+      },
       create: {
+        organizationId: input.organizationId,
         weddingId: input.weddingId,
+        guestId: input.guestId,
+        missionId: input.missionId,
         submissionId: input.submissionId,
         storageKey,
         originalName: input.originalName,
@@ -291,7 +305,7 @@ async function finalizeSubmission(input: {
     }
 
     const mission = await transaction.mission.findFirst({
-      where: { id: input.missionId, weddingId: input.weddingId },
+      where: { id: input.missionId, organizationId: input.organizationId, weddingId: input.weddingId },
       select: { points: true, title: true },
     });
     if (!mission) throw new DomainError("MISSION_NOT_FOUND", 404, "Missão não encontrada neste casamento.");
@@ -313,11 +327,13 @@ async function finalizeSubmission(input: {
 
     await transaction.scoreEntry.create({
       data: {
+        organizationId: input.organizationId,
         weddingId: input.weddingId,
         guestId: input.guestId,
         missionId: input.missionId,
         submissionId: input.submissionId,
         points: mission.points,
+        source: ScoreEntrySource.MISSION_COMPLETION,
       },
     });
     const guest = await transaction.guest.update({
@@ -339,11 +355,17 @@ export async function uploadMissionPhoto(input: UploadMissionPhotoInput) {
   const clientUploadId = validateClientUploadId(input.clientUploadId);
   const photo = await validatePhotoFile(input.file);
   const { wedding, guest } = await getGuestContext(input.eventIdentifier, guestToken);
-  const prepared = await prepareSubmission({ weddingId: wedding.id, guestId: guest.id, missionId, clientUploadId });
+  const prepared = await prepareSubmission({
+    organizationId: wedding.organizationId,
+    weddingId: wedding.id,
+    guestId: guest.id,
+    missionId,
+    clientUploadId,
+  });
 
   if (prepared.alreadyUploaded) {
     const score = await prisma.scoreEntry.aggregate({
-      where: { weddingId: wedding.id, guestId: guest.id },
+      where: { organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id },
       _sum: { points: true },
     });
     return {
@@ -364,6 +386,7 @@ export async function uploadMissionPhoto(input: UploadMissionPhotoInput) {
 
   try {
     const finalized = await finalizeSubmission({
+      organizationId: wedding.organizationId,
       weddingId: wedding.id,
       guestId: guest.id,
       missionId,
@@ -403,7 +426,7 @@ async function removeGuestSubmission(input: {
   const submissionId = validateSubmissionId(input.submissionId);
   const { wedding, guest } = await getGuestContext(input.eventIdentifier, guestToken);
   const submission = await prisma.submission.findFirst({
-    where: { id: submissionId, weddingId: wedding.id, guestId: guest.id, missionId },
+    where: { id: submissionId, organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id, missionId },
     select: { id: true, photo: { select: { storageKey: true } } },
   });
   if (!submission) {
@@ -420,14 +443,14 @@ async function removeGuestSubmission(input: {
 
   return withTransactionRetry(() => prisma.$transaction(async (transaction) => {
     const current = await transaction.submission.findFirst({
-      where: { id: submission.id, weddingId: wedding.id, guestId: guest.id, missionId },
+      where: { id: submission.id, organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id, missionId },
       select: { id: true },
     });
     if (!current) throw new DomainError("SUBMISSION_NOT_FOUND", 404, "Foto não encontrada neste casamento.");
 
     await transaction.submission.delete({ where: { id: current.id } });
     const remainingPoints = await transaction.scoreEntry.aggregate({
-      where: { weddingId: wedding.id, guestId: guest.id },
+      where: { organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id },
       _sum: { points: true },
     });
     const score = remainingPoints._sum.points ?? 0;
@@ -466,11 +489,12 @@ export async function deleteLegacyGuestSubmission(input: {
   const clientUploadId = validateClientUploadId(input.clientUploadId);
   const { wedding, guest } = await getGuestContext(input.eventIdentifier, guestToken);
   const exact = await prisma.submission.findFirst({
-    where: { weddingId: wedding.id, guestId: guest.id, missionId, clientUploadId },
+    where: { organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id, missionId, clientUploadId },
     select: { id: true },
   });
   const legacy = exact ?? await prisma.submission.findFirst({
     where: {
+      organizationId: wedding.organizationId,
       weddingId: wedding.id,
       guestId: guest.id,
       missionId,

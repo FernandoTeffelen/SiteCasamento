@@ -13,6 +13,12 @@ blob-report/
 .turbo/
 .vercel/
 .local-storage/
+.local-postgres-data/
+
+# Bancos locais e arquivos de credenciais
+*.sqlite
+*.sqlite3
+*.db
 
 # Variáveis de ambiente e segredos
 .env
@@ -32,7 +38,11 @@ pnpm-debug.log*
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Arquivos de ideia/anotações locais
-*.txt
+ideia.txt
+ideia2.txt
+ideia3.txt
+ideia4.txt
+notas.txt
 
 # Sistema operacional
 .DS_Store
@@ -50,3 +60,5 @@ Desktop.ini
 *.temp
 *.bak
 .eslintcache
+
+SiteCasamento_Resumo_do_Projeto.docx

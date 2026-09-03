@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { ObjectStorage, StoredObject, UploadObjectInput } from "@/lib/storage/types";
 
 type S3CompatibleConfig = {
@@ -33,6 +33,15 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
       ContentType: input.contentType,
     }));
     return { storageKey: input.storageKey };
+  }
+
+  async get(storageKey: string) {
+    const result = await this.client.send(new GetObjectCommand({ Bucket: this.config.bucket, Key: storageKey }));
+    if (!result.Body) throw new Error("O objeto não foi encontrado no armazenamento.");
+    return {
+      body: await result.Body.transformToByteArray(),
+      contentType: result.ContentType ?? "application/octet-stream",
+    };
   }
 
   getPublicUrl() {

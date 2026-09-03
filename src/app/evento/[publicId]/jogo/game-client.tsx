@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import type { EventView } from "@/features/event/types";
-import { getLocalGuestName, getLocalGuestToken } from "@/lib/guest/local-guest";
+import { GuestProfileButton, type GuestProfile } from "@/features/guest/guest-profile";
+import { getLocalGuestName, getLocalGuestToken, saveLocalGuest } from "@/lib/guest/local-guest";
 import { listQueuedPhotos, queuePhoto } from "@/lib/offline/photo-queue";
 import { uploadPendingPhotos, uploadQueuedPhoto, type UploadAttemptResult } from "@/lib/offline/upload-queue";
+import { visualConfigToCssVariables } from "@/lib/templates/wedding-visual-config";
 
 type Mission = {
   id: string;
@@ -36,6 +38,7 @@ export function GameClient({ event }: { event: EventView }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [guestName, setGuestName] = useState("Convidado");
   const [guestToken, setGuestToken] = useState("");
+  const [guestProfile, setGuestProfile] = useState<GuestProfile | null>(null);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [localPhotoCounts, setLocalPhotoCounts] = useState<Record<string, number>>({});
   const [score, setScore] = useState(0);
@@ -59,7 +62,7 @@ export function GameClient({ event }: { event: EventView }) {
     const savedToken = getLocalGuestToken(event.publicId);
 
     if (!savedToken) {
-      router.replace(`/evento/${encodeURIComponent(event.identifier)}`);
+      router.replace(event.publicPath);
       return () => {
         isMounted = false;
       };
@@ -75,7 +78,10 @@ export function GameClient({ event }: { event: EventView }) {
           listQueuedPhotos(event.publicId, savedToken),
         ]);
         const missionsPayload = await missionsResponse.json() as { missions?: Mission[]; guest?: { name?: string } } & ApiError;
-        const scorePayload = await scoreResponse.json() as { score?: number; guest?: { name?: string } } & ApiError;
+        const scorePayload = await scoreResponse.json() as {
+          score?: number;
+          guest?: GuestProfile & { token?: string };
+        } & ApiError;
 
         if (!missionsResponse.ok) throw new Error(readApiError(missionsPayload, "Não foi possível carregar as missões."));
         if (!scoreResponse.ok) throw new Error(readApiError(scorePayload, "Não foi possível carregar a pontuação."));
@@ -88,7 +94,16 @@ export function GameClient({ event }: { event: EventView }) {
 
         setGuestToken(savedToken);
         const fallbackGuestName = getLocalGuestName(event.publicId) || "Convidado";
-        setGuestName(scorePayload.guest?.name ?? missionsPayload.guest?.name ?? fallbackGuestName);
+        const loadedGuestName = scorePayload.guest?.name ?? missionsPayload.guest?.name ?? fallbackGuestName;
+        setGuestName(loadedGuestName);
+        setGuestProfile({
+          name: loadedGuestName,
+          email: scorePayload.guest?.email ?? null,
+          age: scorePayload.guest?.age ?? null,
+          relationshipToCouple: scorePayload.guest?.relationshipToCouple ?? null,
+          hasAvatar: scorePayload.guest?.hasAvatar ?? false,
+          updatedAt: scorePayload.guest?.updatedAt ?? new Date(0).toISOString(),
+        });
         setMissions(missionsPayload.missions ?? []);
         setScore(scorePayload.score ?? 0);
         setLocalPhotoCounts(photoCounts);
@@ -103,12 +118,10 @@ export function GameClient({ event }: { event: EventView }) {
     return () => {
       isMounted = false;
     };
-  }, [event.identifier, event.publicId, router]);
+  }, [event.identifier, event.publicId, event.publicPath, router]);
 
   const completedMissions = missions.filter((mission) => mission.completed).length;
   const totalPhotos = Object.values(localPhotoCounts).reduce((total, count) => total + count, 0);
-  const guestInitial = Array.from(guestName.trim())[0]?.toLocaleUpperCase("pt-BR") ?? "C";
-
   function openCamera(missionId: string) {
     setActiveMissionId(missionId);
     setSaveError(null);
@@ -212,20 +225,20 @@ export function GameClient({ event }: { event: EventView }) {
   }
 
   if (isLoading) {
-    return <main className="game-screen"><p className="photos-feedback">Carregando o jogo…</p></main>;
+    return <main className="game-screen wedding-themed" style={visualConfigToCssVariables(event.visual) as CSSProperties}><p className="photos-feedback">Carregando o jogo…</p></main>;
   }
 
   if (loadError) {
     return (
-      <main className="game-screen">
+      <main className="game-screen wedding-themed" style={visualConfigToCssVariables(event.visual) as CSSProperties}>
         <p className="photos-feedback photos-error" role="alert">{loadError}</p>
-        <Link className="back-link" href={`/evento/${encodeURIComponent(event.identifier)}`}>Voltar para o início</Link>
+        <Link className="back-link" href={event.publicPath}>Voltar para o início</Link>
       </main>
     );
   }
 
   return (
-    <main className="game-screen">
+    <main className="game-screen wedding-themed" style={visualConfigToCssVariables(event.visual) as CSSProperties}>
       <input
         ref={fileInputRef}
         className="camera-input"
@@ -241,7 +254,19 @@ export function GameClient({ event }: { event: EventView }) {
           <p className="game-event-name">{event.brideName} &amp; {event.groomName}</p>
           <h1>Olá, {guestName}!</h1>
         </div>
-        <div className="guest-avatar" aria-label={`Perfil de ${guestName}`}>{guestInitial}</div>
+        {guestProfile && guestToken ? (
+          <GuestProfileButton
+            eventIdentifier={event.identifier}
+            guestToken={guestToken}
+            profile={guestProfile}
+            onSaved={(profile) => {
+              setGuestProfile(profile);
+              setGuestName(profile.name);
+              saveLocalGuest(event.publicId, { name: profile.name, email: profile.email, token: guestToken });
+              setNotice("Perfil atualizado.");
+            }}
+          />
+        ) : <div className="guest-avatar" aria-label={`Perfil de ${guestName}`}>{Array.from(guestName.trim())[0]?.toLocaleUpperCase("pt-BR") ?? "C"}</div>}
       </header>
 
       <section className="score-card" aria-label="Seu placar">
@@ -255,7 +280,7 @@ export function GameClient({ event }: { event: EventView }) {
         </div>
       </section>
 
-      <Link className="photos-shortcut" href={`/evento/${encodeURIComponent(event.identifier)}/fotos`}>
+      <Link className="photos-shortcut" href={`${event.publicPath}/fotos`}>
         <span aria-hidden="true">▣</span> Minhas fotos
         {totalPhotos > 0 ? <span className="photos-shortcut-count">{totalPhotos}</span> : null}
         <span aria-hidden="true">→</span>

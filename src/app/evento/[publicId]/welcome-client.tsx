@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import type { EventView } from "@/features/event/types";
-import { getLocalGuestName, getLocalGuestToken, saveLocalGuest } from "@/lib/guest/local-guest";
+import { getLocalGuestEmail, getLocalGuestName, getLocalGuestToken, saveLocalGuest } from "@/lib/guest/local-guest";
+import { visualConfigToCssVariables } from "@/lib/templates/wedding-visual-config";
 
 type JoinEventResponse = {
-  guest?: { name: string; token: string };
+  guest?: { name: string; email: string | null; token: string };
   error?: { message?: string };
 };
 
@@ -14,12 +15,14 @@ export function WelcomeClient({ event }: { event: EventView }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
       setGuestName(getLocalGuestName(event.publicId));
+      setGuestEmail(getLocalGuestEmail(event.publicId));
     }, 0);
 
     return () => window.clearTimeout(timerId);
@@ -28,10 +31,15 @@ export function WelcomeClient({ event }: { event: EventView }) {
   async function enterGame(formEvent: FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
     const normalizedName = guestName.trim();
+    const normalizedEmail = guestEmail.trim();
 
     if (!normalizedName) {
       setError("Digite seu nome ou apelido para entrar.");
       inputRef.current?.focus();
+      return;
+    }
+    if (!normalizedEmail) {
+      setError("Informe seu e-mail para diferenciar seu perfil.");
       return;
     }
 
@@ -44,6 +52,7 @@ export function WelcomeClient({ event }: { event: EventView }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: normalizedName,
+          email: normalizedEmail,
           guestToken: getLocalGuestToken(event.publicId) || undefined,
         }),
       });
@@ -54,7 +63,7 @@ export function WelcomeClient({ event }: { event: EventView }) {
       }
 
       saveLocalGuest(event.publicId, payload.guest);
-      router.push(`/evento/${encodeURIComponent(event.identifier)}/jogo`);
+      router.push(`${event.publicPath}/jogo`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Não foi possível entrar no jogo.");
     } finally {
@@ -63,22 +72,27 @@ export function WelcomeClient({ event }: { event: EventView }) {
   }
 
   return (
-    <main className="welcome-screen">
+    <main className="welcome-screen wedding-themed" style={visualConfigToCssVariables(event.visual) as CSSProperties}>
       <div className="welcome-glow welcome-glow-top" aria-hidden="true" />
       <div className="welcome-glow welcome-glow-bottom" aria-hidden="true" />
 
       <section className="welcome-content" aria-labelledby="couple-name">
         <header className="welcome-header">
-          <div className="monogram" aria-hidden="true"><span>♥</span></div>
-          <p className="event-kicker">Nosso casamento</p>
+          {event.visual.assets.coverImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="welcome-cover" src={event.visual.assets.coverImageUrl} alt="Capa do casamento" />
+          ) : null}
+          {event.visual.assets.logoImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="welcome-logo" src={event.visual.assets.logoImageUrl} alt={`Logo de ${event.name}`} />
+          ) : <div className="monogram" aria-hidden="true"><span>♥</span></div>}
+          <p className="event-kicker">{event.visual.texts.eventKicker}</p>
           <h1 id="couple-name">{event.brideName} <span>&amp;</span> {event.groomName}</h1>
         </header>
 
         <div className="welcome-copy">
-          <p className="welcome-title">Que alegria ter você aqui!</p>
-          <p className="welcome-description">
-            Entre no nosso jogo de fotos e ajude a guardar os momentos mais especiais deste dia.
-          </p>
+          <p className="welcome-title">{event.visual.texts.welcomeTitle}</p>
+          <p className="welcome-description">{event.visual.texts.welcomeDescription}</p>
         </div>
 
         <form className="entry-form" onSubmit={enterGame} noValidate>
@@ -102,6 +116,23 @@ export function WelcomeClient({ event }: { event: EventView }) {
               if (error) setError(null);
             }}
           />
+          <label htmlFor="guest-email">Seu e-mail</label>
+          <input
+            id="guest-email"
+            name="guest-email"
+            type="email"
+            placeholder="voce@exemplo.com"
+            value={guestEmail}
+            maxLength={254}
+            disabled={isSubmitting}
+            autoComplete="email"
+            inputMode="email"
+            enterKeyHint="go"
+            onChange={(inputEvent) => {
+              setGuestEmail(inputEvent.target.value);
+              if (error) setError(null);
+            }}
+          />
           {error ? <p className="entry-error" id="guest-name-error" role="alert">{error}</p> : null}
           <button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Entrando…" : <>Entrar no jogo <span aria-hidden="true">→</span></>}
@@ -109,7 +140,7 @@ export function WelcomeClient({ event }: { event: EventView }) {
         </form>
       </section>
 
-      <p className="welcome-footer">Leva só alguns segundos</p>
+      <p className="welcome-footer">Leva só alguns segundos. Seu e-mail só diferencia seu perfil; não há senha.</p>
     </main>
   );
 }
