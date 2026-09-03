@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ADMIN_SESSION_COOKIE, authenticateAdmin, checkUserIsPayingOrActive } from "@/server/auth/admin-auth.service";
+import { ADMIN_SESSION_COOKIE, checkUserIsPayingOrActive, registerAdminUser } from "@/server/auth/admin-auth.service";
 import { jsonError } from "@/server/http/api-response";
 import { isDomainError } from "@/server/domain/error";
 
@@ -10,22 +10,26 @@ export async function POST(request: Request) {
   const isJson = contentType.includes("application/json");
 
   try {
+    let name: unknown;
     let email: unknown;
     let password: unknown;
 
     if (isJson) {
       const body = await request.json();
+      name = body.name;
       email = body.email;
       password = body.password;
     } else {
       const formData = await request.formData();
+      name = formData.get("name");
       email = formData.get("email");
       password = formData.get("password");
     }
 
-    const session = await authenticateAdmin({ email, password });
+    const session = await registerAdminUser({ name, email, password });
     const isPaying = await checkUserIsPayingOrActive(session.user.id);
-    const redirectPath = isPaying ? "/app" : "/planos?notice=subscription_required";
+
+    const redirectPath = isPaying ? "/app" : "/planos?notice=new_account";
 
     if (isJson) {
       const response = NextResponse.json({ user: session.user, isPaying, redirectPath });
@@ -54,8 +58,8 @@ export async function POST(request: Request) {
     return response;
   } catch (error) {
     if (!isJson && isDomainError(error)) {
-      const errorMsg = encodeURIComponent("E-mail ou senha incorretos.");
-      return NextResponse.redirect(new URL(`/app/login?error=${errorMsg}`, request.url), 303);
+      const errorMsg = encodeURIComponent(error.message);
+      return NextResponse.redirect(new URL(`/app/cadastro?error=${errorMsg}`, request.url), 303);
     }
     return jsonError(error);
   }

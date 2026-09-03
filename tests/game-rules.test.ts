@@ -14,7 +14,14 @@ import {
 import type { ObjectStorage } from "../src/lib/storage/types";
 import { prisma } from "../src/server/db/prisma";
 import { DomainError } from "../src/server/domain/error";
-import { findWeddingByIdentifier } from "../src/server/events/wedding.service";
+import {
+  findWeddingByIdentifier,
+  findWeddingByPublicAccessToken,
+  generateSecureWeddingToken,
+  restoreWeddingPublicAccess,
+  revokeWeddingPublicAccess,
+  rotateWeddingPublicToken,
+} from "../src/server/events/wedding.service";
 import { getActiveEventView } from "../src/server/events/event-view.service";
 import { findWeddingForOrganizationUser } from "../src/server/organizations/organization-access.service";
 import {
@@ -855,4 +862,274 @@ test("permite limpar registros PENDING da versão anterior ao excluir a foto loc
   });
   assert.equal(deleted.score, 0);
   assert.equal(await prisma.submission.count({ where: { id: legacySubmission.id } }), 0);
+});
+
+test("rejeita tokens inválidos, curtos, vazios, não existentes e IDs numéricos sequenciais", async () => {
+  // Testes de tokens inválidos e não enumeráveis
+  await assert.rejects(
+    () => findWeddingByPublicAccessToken(""),
+    (error: unknown) => error instanceof DomainError && error.code === "INVALID_EVENT_TOKEN",
+  );
+  await assert.rejects(
+    () => findWeddingByPublicAccessToken("123"),
+    (error: unknown) => error instanceof DomainError && error.code === "INVALID_EVENT_TOKEN",
+  );
+  await assert.rejects(
+    () => findWeddingByPublicAccessToken("1002495817264819"),
+    (error: unknown) => error instanceof DomainError && error.code === "INVALID_EVENT_TOKEN",
+  );
+  await assert.rejects(
+    () => findWeddingByPublicAccessToken("evt_token_inexistente_1234567890abcdef"),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_NOT_FOUND",
+  );
+
+  // Slug legível não é aceito como token público no getActiveEventView
+  await assert.rejects(
+    () => getActiveEventView(eventASlug),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_NOT_FOUND",
+  );
+});
+
+test("casamento sem expiração próxima permanece ativo e acessível indefinidamente", async () => {
+  const perpetualToken = generateSecureWeddingToken();
+  const perpetualWedding = await prisma.wedding.create({
+    data: {
+      organizationId: organizationAId,
+      publicId: perpetualToken,
+      name: "Casamento Sem Expiração Próxima",
+      brideName: "Sofia",
+      groomName: "Lucas",
+      status: WeddingStatus.ACTIVE,
+      publicAccessStartsAt: testPublicAccessStartsAt,
+      publicAccessEndsAt: testPublicAccessEndsAt,
+      publicAccessRevokedAt: null,
+    },
+  });
+
+  const eventView = await getActiveEventView(perpetualToken);
+  assert.equal(eventView.publicId, perpetualToken);
+  assert.equal(eventView.brideName, "Sofia");
+  assert.equal(eventView.groomName, "Lucas");
+
+  const guestRegistration = await registerOrIdentifyGuest(perpetualToken, {
+    name: "Convidado Perpétuo",
+    email: `perpetuo-${testSuffix}@example.test`,
+  });
+  assert.equal(guestRegistration.created, true);
+  assert.equal(guestRegistration.wedding.id, perpetualWedding.id);
+});
+
+test("bloqueia acesso a casamento com status inativo (DRAFT, CLOSED, ARCHIVED)", async () => {
+  const draftToken = generateSecureWeddingToken();
+  await prisma.wedding.create({
+    data: {
+      organizationId: organizationAId,
+      publicId: draftToken,
+      name: "Casamento Rascunho",
+      brideName: "Julia",
+      groomName: "Pedro",
+      status: WeddingStatus.DRAFT,
+    },
+  });
+
+  await assert.rejects(
+    () => getActiveEventView(draftToken),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_UNAVAILABLE",
+  );
+
+  const closedToken = generateSecureWeddingToken();
+  await prisma.wedding.create({
+    data: {
+      organizationId: organizationAId,
+      publicId: closedToken,
+      name: "Casamento Encerrado",
+      brideName: "Renata",
+      groomName: "Thiago",
+      status: WeddingStatus.CLOSED,
+      publicAccessStartsAt: testPublicAccessStartsAt,
+      publicAccessEndsAt: testPublicAccessEndsAt,
+    },
+  });
+
+  await assert.rejects(
+    () => getActiveEventView(closedToken),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_UNAVAILABLE",
+  );
+});
+
+test("revogação manual bloqueia acesso público e restauração reativa sem perda de dados", async () => {
+  const revocableToken = generateSecureWeddingToken();
+  const revocableWedding = await prisma.wedding.create({
+    data: {
+      organizationId: organizationAId,
+      publicId: revocableToken,
+      name: "Casamento Revogável",
+      brideName: "Beatriz",
+      groomName: "Mateus",
+      status: WeddingStatus.ACTIVE,
+      publicAccessStartsAt: testPublicAccessStartsAt,
+      publicAccessEndsAt: testPublicAccessEndsAt,
+    },
+  });
+
+  const mission = await prisma.mission.create({
+    data: {
+      organizationId: organizationAId,
+      weddingId: revocableWedding.id,
+      title: "Foto dos Noivos",
+      points: 100,
+      displayOrder: 1,
+    },
+  });
+
+  const guestAccess = await registerOrIdentifyGuest(revocableToken, {
+    name: "Convidada Beatriz",
+    email: `beatriz-${testSuffix}@example.test`,
+  });
+
+  const storage = new MemoryStorage();
+  const photoUpload = await uploadMissionPhoto({
+    eventIdentifier: revocableToken,
+    guestToken: guestAccess.guest.token,
+    missionId: mission.id,
+    clientUploadId: `upload-${crypto.randomUUID()}`,
+    file: createJpegFile(),
+    storage,
+  });
+  assert.equal(photoUpload.awardedNow, true);
+
+  // 1. Revogar o acesso público manualmente
+  const revokedWedding = await revokeWeddingPublicAccess({
+    organizationId: organizationAId,
+    weddingId: revocableWedding.id,
+  });
+  assert.notEqual(revokedWedding.publicAccessRevokedAt, null);
+
+  // 2. Tentar acessar o evento revogado deve falhar
+  await assert.rejects(
+    () => getActiveEventView(revocableToken),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_UNAVAILABLE",
+  );
+  await assert.rejects(
+    () => listGuestMissions(revocableToken, guestAccess.guest.token),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_UNAVAILABLE",
+  );
+  await assert.rejects(
+    () => getEventRanking(revocableToken),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_UNAVAILABLE",
+  );
+
+  // 3. Verificar que os dados continuam intactos no banco de dados
+  const preservedWedding = await prisma.wedding.findUniqueOrThrow({ where: { id: revocableWedding.id } });
+  const preservedGuest = await prisma.guest.findUniqueOrThrow({ where: { id: guestAccess.guest.id } });
+  const preservedPhoto = await prisma.photo.findFirstOrThrow({ where: { weddingId: revocableWedding.id } });
+  const preservedScore = await prisma.scoreEntry.findFirstOrThrow({ where: { weddingId: revocableWedding.id } });
+
+  assert.equal(preservedWedding.id, revocableWedding.id);
+  assert.equal(preservedGuest.name, "Convidada Beatriz");
+  assert.equal(preservedGuest.score, 100);
+  assert.equal(preservedPhoto.submissionId, photoUpload.submission.id);
+  assert.equal(preservedScore.points, 100);
+
+  // 4. Restaurar o acesso público
+  const restoredWedding = await restoreWeddingPublicAccess({
+    organizationId: organizationAId,
+    weddingId: revocableWedding.id,
+  });
+  assert.equal(restoredWedding.publicAccessRevokedAt, null);
+
+  // 5. Acesso funciona novamente normalmente
+  const activeView = await getActiveEventView(revocableToken);
+  assert.equal(activeView.publicId, revocableToken);
+  const ranking = await getEventRanking(revocableToken);
+  assert.equal(ranking.ranking.length, 1);
+  assert.equal(ranking.ranking[0]?.name, "Convidada Beatriz");
+});
+
+test("rotação de token gera novo identificador seguro, invalida o antigo e preserva todos os dados", async () => {
+  const initialToken = generateSecureWeddingToken();
+  const rotatingWedding = await prisma.wedding.create({
+    data: {
+      organizationId: organizationAId,
+      publicId: initialToken,
+      name: "Casamento Rotação",
+      brideName: "Helena",
+      groomName: "Gabriel",
+      status: WeddingStatus.ACTIVE,
+      publicAccessStartsAt: testPublicAccessStartsAt,
+      publicAccessEndsAt: testPublicAccessEndsAt,
+    },
+  });
+
+  const guest = await registerOrIdentifyGuest(initialToken, {
+    name: "Convidado Rotação",
+    email: `rotacao-${testSuffix}@example.test`,
+  });
+  assert.equal(guest.created, true);
+
+  // Rotaciona o token do casamento
+  const rotation = await rotateWeddingPublicToken({
+    organizationId: organizationAId,
+    weddingId: rotatingWedding.id,
+  });
+
+  assert.equal(rotation.oldToken, initialToken);
+  assert.notEqual(rotation.newToken, initialToken);
+  assert.equal(rotation.newToken.startsWith("evt_"), true);
+  assert.equal(rotation.wedding.publicId, rotation.newToken);
+
+  // Token antigo deixa de existir/funcionar
+  await assert.rejects(
+    () => findWeddingByPublicAccessToken(initialToken),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_NOT_FOUND",
+  );
+  await assert.rejects(
+    () => getActiveEventView(initialToken),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_NOT_FOUND",
+  );
+
+  // Novo token funciona perfeitamente com os mesmos convidados e dados
+  const viewWithNewToken = await getActiveEventView(rotation.newToken);
+  assert.equal(viewWithNewToken.publicId, rotation.newToken);
+  assert.equal(viewWithNewToken.brideName, "Helena");
+
+  const identifiedWithNewToken = await registerOrIdentifyGuest(rotation.newToken, {
+    name: "Convidado Rotação",
+    email: `rotacao-${testSuffix}@example.test`,
+    guestToken: guest.guest.token,
+  });
+  assert.equal(identifiedWithNewToken.created, false);
+  assert.equal(identifiedWithNewToken.guest.id, guest.guest.id);
+});
+
+test("isolamento estrito entre casamentos impede que convidados acessem ou enviem dados para outro evento", async () => {
+  // Convidado A tenta registrar ou acessar missões no evento B
+  await assert.rejects(
+    () => listGuestMissions(eventBToken, guestAToken),
+    (error: unknown) => error instanceof DomainError && error.code === "GUEST_NOT_FOUND",
+  );
+
+  await assert.rejects(
+    () => getGuestScore(eventBToken, guestAToken),
+    (error: unknown) => error instanceof DomainError && error.code === "GUEST_NOT_FOUND",
+  );
+
+  // Convidado A tenta enviar foto para missão A usando token do evento B
+  await assert.rejects(
+    () => uploadMissionPhoto({
+      eventIdentifier: eventBToken,
+      guestToken: guestAToken,
+      missionId: missionAId,
+      clientUploadId: `upload-${crypto.randomUUID()}`,
+      file: createJpegFile(),
+      storage: new MemoryStorage(),
+    }),
+    (error: unknown) => error instanceof DomainError && error.code === "GUEST_NOT_FOUND",
+  );
+
+  // Tentativa de acessar casamento inexistente por ID numérico aleatório
+  await assert.rejects(
+    () => findWeddingByPublicAccessToken("9876543210123456"),
+    (error: unknown) => error instanceof DomainError && error.code === "INVALID_EVENT_TOKEN",
+  );
 });

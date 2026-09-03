@@ -1,76 +1,1509 @@
 :root {
   color-scheme: light;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #fff8f5;
-  color: #342224;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #fdfbf9;
+  color: #2e1d20;
 }
 
 * { box-sizing: border-box; }
 
-html, body { min-height: 100%; }
-
-body { margin: 0; }
+html, body { min-height: 100%; margin: 0; }
 
 button, input, textarea, select { font: inherit; }
-
 button { -webkit-tap-highlight-color: transparent; }
 
-/* Valores recebidos de um template ou de um override validado do casamento. */
+/* ====================================================================
+   1. AMBIENTE PÚBLICO / COMERCIAL (LANDING PAGE & PLANOS) — DESKTOP
+   ==================================================================== */
+.commercial-layout {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #fffcfb 0%, #fef8f6 100%);
+  color: #3b2226;
+}
+
+.commercial-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(12px);
+  background: rgba(255, 252, 251, 0.9);
+  border-bottom: 1px solid #f3e2de;
+  padding: 1rem 1.5rem;
+}
+
+.navbar-container {
+  max-width: 72rem;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: #3b2226;
+}
+
+.brand-icon { font-size: 1.6rem; }
+.brand-text { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; color: #3b2226; }
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.navbar-links a {
+  text-decoration: none;
+  color: #6d4e52;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: color 150ms ease;
+}
+
+.navbar-links a:hover,
+.navbar-links a.active {
+  color: #a95954;
+}
+
+.btn-login-nav {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.65rem 1.25rem;
+  border-radius: 999px;
+  background: #a95954;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(169, 89, 84, 0.2);
+  transition: all 150ms ease;
+}
+
+.btn-login-nav:hover {
+  background: #934a45;
+  transform: translateY(-1px);
+}
+
+/* Hero Section */
+.hero-section {
+  padding: 5rem 1.5rem 4rem;
+  text-align: center;
+  background: radial-gradient(circle at 50% 20%, rgba(246, 222, 217, 0.45) 0%, transparent 60%);
+}
+
+.hero-container {
+  max-width: 54rem;
+  margin-inline: auto;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  background: #fbeee9;
+  border: 1px solid #f1d5cd;
+  color: #a05752;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  margin-bottom: 1.5rem;
+}
+
+.hero-title {
+  margin: 0 0 1.25rem;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.5rem, 5vw, 3.8rem);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  color: #2d181b;
+}
+
+.hero-title span {
+  color: #a95954;
+  font-style: italic;
+}
+
+.hero-subtitle {
+  margin: 0 auto 2.25rem;
+  max-width: 42rem;
+  font-size: clamp(1.1rem, 2vw, 1.25rem);
+  line-height: 1.6;
+  color: #6d4e52;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+.btn-hero-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 2rem;
+  border-radius: 0.9rem;
+  background: #a95954;
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 750;
+  text-decoration: none;
+  box-shadow: 0 8px 24px rgba(169, 89, 84, 0.28);
+  transition: all 150ms ease;
+}
+
+.btn-hero-primary:hover {
+  background: #934a45;
+  transform: translateY(-2px);
+}
+
+.btn-hero-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 1.75rem;
+  border-radius: 0.9rem;
+  background: #fff;
+  border: 1px solid #e7cdcb;
+  color: #6d4e52;
+  font-size: 1.05rem;
+  font-weight: 750;
+  text-decoration: none;
+  transition: all 150ms ease;
+}
+
+.btn-hero-secondary:hover {
+  background: #fdf6f4;
+  border-color: #d8b7b4;
+}
+
+.hero-highlight-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #7b585c;
+}
+
+/* Seções de Conteúdo */
+.how-it-works-section,
+.features-section {
+  padding: 4.5rem 1.5rem;
+}
+
+.section-container {
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+.section-header-center {
+  text-align: center;
+  max-width: 38rem;
+  margin: 0 auto 3rem;
+}
+
+.section-tag {
+  display: inline-block;
+  color: #a95954;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.section-header-center h2 {
+  margin: 0 0 0.75rem;
+  font-size: 2.2rem;
+  letter-spacing: -0.04em;
+  color: #2d181b;
+}
+
+.section-header-center p {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #6d4e52;
+}
+
+/* Steps Grid */
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1.75rem;
+}
+
+.step-card {
+  padding: 2rem 1.75rem;
+  background: #fff;
+  border: 1px solid #f1ddd9;
+  border-radius: 1.25rem;
+  box-shadow: 0 8px 24px rgba(85, 42, 46, 0.04);
+}
+
+.step-number {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: #fbede9;
+  color: #a95954;
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 1.25rem;
+}
+
+.step-card h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.2rem;
+  letter-spacing: -0.025em;
+  color: #2d181b;
+}
+
+.step-card p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #6d4e52;
+}
+
+/* Features Grid */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1.5rem;
+}
+
+.feature-card {
+  padding: 1.75rem;
+  background: #fff;
+  border: 1px solid #f2dfdc;
+  border-radius: 1.25rem;
+  box-shadow: 0 6px 20px rgba(85, 42, 46, 0.03);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(85, 42, 46, 0.07);
+}
+
+.feature-icon {
+  font-size: 2.2rem;
+  margin-bottom: 1rem;
+}
+
+.feature-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  letter-spacing: -0.025em;
+  color: #2d181b;
+}
+
+.feature-card p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #6d4e52;
+}
+
+/* CTA Banner */
+.cta-banner-section {
+  padding: 4rem 1.5rem;
+  background: linear-gradient(135deg, #a95954 0%, #873e3a 100%);
+  color: #fff;
+  text-align: center;
+}
+
+.cta-container {
+  max-width: 44rem;
+  margin-inline: auto;
+}
+
+.cta-container h2 {
+  margin: 0 0 0.75rem;
+  font-size: 2.2rem;
+  letter-spacing: -0.035em;
+}
+
+.cta-container p {
+  margin: 0 0 2rem;
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+.cta-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.btn-cta-white {
+  display: inline-flex;
+  padding: 0.9rem 1.75rem;
+  border-radius: 0.8rem;
+  background: #fff;
+  color: #873e3a;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.btn-cta-outline {
+  display: inline-flex;
+  padding: 0.9rem 1.75rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+/* Footer */
+.commercial-footer {
+  background: #231416;
+  color: #f7e6e4;
+  padding: 3.5rem 1.5rem 2rem;
+}
+
+.footer-container {
+  max-width: 72rem;
+  margin-inline: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.footer-brand strong {
+  display: block;
+  font-size: 1.15rem;
+  margin-bottom: 0.35rem;
+}
+
+.footer-brand p {
+  margin: 0;
+  color: #b29393;
+  font-size: 0.875rem;
+}
+
+.footer-links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.footer-links a {
+  color: #f7e6e4;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.footer-bottom {
+  max-width: 72rem;
+  margin: 1.5rem auto 0;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: #8f7273;
+}
+
+/* ====================================================================
+   2. TELA DE PLANOS & PREÇOS — DESKTOP
+   ==================================================================== */
+.plans-page-container {
+  max-width: 72rem;
+  margin-inline: auto;
+  padding: 3.5rem 1.5rem 5rem;
+}
+
+.plans-header {
+  text-align: center;
+  max-width: 42rem;
+  margin: 0 auto 3rem;
+}
+
+.plans-header h1 {
+  margin: 0.35rem 0 0.85rem;
+  font-size: 2.5rem;
+  letter-spacing: -0.04em;
+  color: #2d181b;
+}
+
+.plans-header p {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.55;
+  color: #6d4e52;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 2rem;
+  align-items: stretch;
+  margin-bottom: 3.5rem;
+}
+
+.pricing-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 2.25rem 2rem;
+  background: #fff;
+  border: 1px solid #eedcd8;
+  border-radius: 1.5rem;
+  box-shadow: 0 8px 24px rgba(85, 42, 46, 0.04);
+}
+
+.pricing-card-featured {
+  border-color: #a95954;
+  box-shadow: 0 16px 40px rgba(169, 89, 84, 0.12);
+  transform: scale(1.02);
+}
+
+.featured-ribbon {
+  position: absolute;
+  top: -0.85rem;
+  right: 1.5rem;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  background: #a95954;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tier-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: #f7e6e2;
+  color: #a95954;
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin-bottom: 0.85rem;
+}
+
+.featured-badge {
+  background: #fae4e1;
+  color: #8c3e39;
+}
+
+.pricing-card h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.6rem;
+  letter-spacing: -0.03em;
+  color: #2d181b;
+}
+
+.tier-desc {
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+  color: #7b5b5f;
+  min-height: 2.5rem;
+}
+
+.pricing-credits-highlight {
+  font-size: 1.35rem;
+  color: #a95954;
+}
+
+.pricing-credits-highlight strong {
+  font-size: 1.85rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.credit-subtext {
+  display: block;
+  font-size: 0.75rem;
+  color: #8c6e71;
+  margin-top: 0.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.pricing-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+  flex: 1;
+  display: grid;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: #55363a;
+}
+
+.btn-plan-select {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.85rem 1.5rem;
+  border-radius: 0.75rem;
+  background: #f6e8e5;
+  color: #a95954;
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition: all 150ms ease;
+}
+
+.btn-plan-select:hover {
+  background: #faece9;
+  color: #8e423d;
+}
+
+.btn-plan-featured {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.95rem 1.5rem;
+  border-radius: 0.75rem;
+  background: #a95954;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(169, 89, 84, 0.25);
+  transition: all 150ms ease;
+}
+
+.btn-plan-featured:hover {
+  background: #914641;
+  transform: translateY(-2px);
+}
+
+.credit-packages-card {
+  padding: 2.5rem;
+  background: #fff;
+  border: 1px solid #eedcd8;
+  border-radius: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  box-shadow: 0 8px 24px rgba(85, 42, 46, 0.04);
+}
+
+.packages-text h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.45rem;
+  letter-spacing: -0.03em;
+  color: #2d181b;
+}
+
+.packages-text p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #6d4e52;
+}
+
+.packages-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.package-pill {
+  padding: 0.85rem 1.25rem;
+  border: 1px solid #eedcd8;
+  border-radius: 1rem;
+  background: #fdf8f6;
+  text-align: center;
+}
+
+.package-pill strong {
+  display: block;
+  font-size: 1rem;
+  color: #a95954;
+}
+
+.package-pill span {
+  display: block;
+  font-size: 0.75rem;
+  color: #7b5b5f;
+  margin-top: 0.15rem;
+}
+
+.plans-back-action {
+  margin-top: 3rem;
+  text-align: center;
+}
+
+.btn-back-home {
+  text-decoration: none;
+  color: #a95954;
+  font-size: 0.95rem;
+  font-weight: 750;
+}
+
+/* ====================================================================
+   3. TELA DE LOGIN ADMINISTRATIVO — DESKTOP
+   ==================================================================== */
+.admin-login-layout {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #fdf6f4 0%, #f6e3de 100%);
+  padding: 2rem 1.5rem;
+}
+
+.login-card-container {
+  width: 100%;
+  max-width: 32rem;
+}
+
+.login-card {
+  padding: 2.75rem 2.5rem;
+  background: #fff;
+  border: 1px solid #f0d8d4;
+  border-radius: 1.75rem;
+  box-shadow: 0 20px 60px rgba(85, 42, 46, 0.1);
+}
+
+.login-card-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  margin-bottom: 1.25rem;
+}
+
+.login-brand .brand-name {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #3b2226;
+}
+
+.login-card-header h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+  letter-spacing: -0.04em;
+  color: #2d181b;
+}
+
+.login-card-header p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: #6d4e52;
+}
+
+.login-form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.login-field label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 750;
+  color: #4a3034;
+  margin-bottom: 0.45rem;
+}
+
+.login-field input {
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0 1rem;
+  border: 1px solid #e1c8c5;
+  border-radius: 0.85rem;
+  background: #fffcfb;
+  outline: none;
+  color: #2d181b;
+  font-size: 1rem;
+  transition: all 150ms ease;
+}
+
+.login-field input:focus {
+  border-color: #a95954;
+  box-shadow: 0 0 0 4px rgba(169, 89, 84, 0.15);
+  background: #fff;
+}
+
+.btn-login-submit {
+  width: 100%;
+  min-height: 3.4rem;
+  margin-top: 0.5rem;
+  border: 0;
+  border-radius: 0.85rem;
+  background: #a95954;
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(169, 89, 84, 0.25);
+  transition: all 150ms ease;
+}
+
+.btn-login-submit:hover {
+  background: #914641;
+  transform: translateY(-1px);
+}
+
+.demo-credentials-box {
+  margin-top: 1.75rem;
+  padding: 1rem 1.25rem;
+  background: #fdf3ef;
+  border: 1px dashed #e6c1bc;
+  border-radius: 0.85rem;
+  font-size: 0.8125rem;
+  color: #7b4f53;
+}
+
+.demo-tag {
+  display: block;
+  font-weight: 800;
+  margin-bottom: 0.35rem;
+  color: #a95954;
+}
+
+.demo-credentials-box p { margin: 0.2rem 0; }
+.demo-credentials-box code {
+  background: #f3deda;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.35rem;
+  font-weight: 700;
+  color: #3b2226;
+}
+
+.login-card-footer {
+  margin-top: 1.75rem;
+  text-align: center;
+}
+
+.link-back-home {
+  text-decoration: none;
+  color: #875c60;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.link-back-home:hover { color: #a95954; }
+
+/* ====================================================================
+   4. PAINEL DA CERIMONIALISTA — DASHBOARD DESKTOP COMPLETO
+   ==================================================================== */
+.admin-desktop-layout {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #fbf8f6;
+  color: #342224;
+}
+
+.admin-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: #fff;
+  border-bottom: 1px solid #eedcd8;
+  padding: 0.9rem 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.admin-nav-container {
+  max-width: 86rem;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.admin-logo-badge { font-size: 1.8rem; }
+.admin-brand-name { display: block; font-size: 1.15rem; font-weight: 800; color: #2d181b; }
+.admin-brand-sub { display: block; font-size: 0.75rem; font-weight: 700; color: #a95954; text-transform: uppercase; letter-spacing: 0.08em; }
+
+.admin-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.admin-org-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  background: #f7ebe8;
+  border: 1px solid #eccbc6;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  color: #7b4440;
+}
+
+.org-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #4b8a5c;
+}
+
+.admin-user-menu {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-greeting { font-size: 0.875rem; color: #6d4e52; }
+.user-greeting strong { color: #2d181b; }
+
+.logout-button {
+  padding: 0.45rem 0.95rem;
+  border-radius: 0.65rem;
+  border: 1px solid #e1c7c4;
+  background: #fff;
+  color: #8c575a;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.logout-button:hover {
+  background: #faecea;
+  color: #a23d39;
+  border-color: #dcb3af;
+}
+
+/* Dashboard Container */
+.admin-main-container {
+  max-width: 86rem;
+  margin-inline: auto;
+  width: 100%;
+  padding: 2.5rem 2rem 4rem;
+}
+
+.admin-hero-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 2.25rem;
+}
+
+.admin-hero-text h1 {
+  margin: 0 0 0.35rem;
+  font-size: 2rem;
+  letter-spacing: -0.04em;
+  color: #2d181b;
+}
+
+.admin-hero-text p {
+  margin: 0;
+  font-size: 1rem;
+  color: #7b585c;
+}
+
+.admin-hero-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.admin-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.6rem;
+  border-radius: 0.8rem;
+  background: #a95954;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 800;
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(169, 89, 84, 0.25);
+  transition: all 150ms ease;
+}
+
+.admin-btn-primary:hover {
+  background: #914641;
+  transform: translateY(-1px);
+}
+
+.admin-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.85rem 1.25rem;
+  border-radius: 0.8rem;
+  border: 1px solid #ded0cc;
+  background: #fff;
+  color: #634346;
+  font-size: 0.95rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.admin-btn-secondary:hover {
+  background: #fbf4f2;
+}
+
+.admin-btn-secondary.spinning {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+/* Metrics Grid */
+.admin-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2.25rem;
+}
+
+.metric-card {
+  display: flex;
+  align-items: center;
+  gap: 1.15rem;
+  padding: 1.4rem 1.5rem;
+  background: #fff;
+  border: 1px solid #f1deda;
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 14px rgba(85, 42, 46, 0.03);
+}
+
+.metric-icon {
+  display: grid;
+  width: 3.25rem;
+  height: 3.25rem;
+  place-items: center;
+  border-radius: 1rem;
+  font-size: 1.5rem;
+}
+
+.metric-purple { background: #f5edf7; }
+.metric-blue { background: #eaf3f9; }
+.metric-green { background: #eaf5ec; }
+.metric-amber { background: #fdf5e7; }
+
+.metric-info { display: flex; flex-direction: column; }
+.metric-label { font-size: 0.8125rem; font-weight: 700; color: #876266; }
+.metric-value { font-size: 1.75rem; font-weight: 900; letter-spacing: -0.04em; color: #2d181b; }
+
+.metric-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.status-live-tag {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #4b8a5c;
+}
+
+.btn-text-small {
+  background: transparent;
+  border: 0;
+  color: #a95954;
+  font-size: 0.75rem;
+  font-weight: 750;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+/* Alert Banner Casamento Criado */
+.created-alert-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  background: #f0f9f2;
+  border: 1px solid #c9ebd1;
+  border-radius: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.alert-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.alert-icon { font-size: 1.8rem; }
+.alert-content strong { display: block; font-size: 1.05rem; color: #276137; }
+.alert-content p { margin: 0.15rem 0 0; font-size: 0.875rem; color: #3e784f; }
+
+.alert-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.admin-btn-copy {
+  padding: 0.6rem 1.15rem;
+  border-radius: 0.65rem;
+  background: #276137;
+  color: #fff;
+  border: 0;
+  font-size: 0.875rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.admin-btn-open {
+  padding: 0.6rem 1.15rem;
+  border-radius: 0.65rem;
+  background: #fff;
+  border: 1px solid #b2dfbe;
+  color: #276137;
+  font-size: 0.875rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.alert-close-btn {
+  background: transparent;
+  border: 0;
+  font-size: 1.2rem;
+  color: #5b8f69;
+  cursor: pointer;
+  padding: 0.4rem;
+}
+
+/* Lista de Casamentos */
+.section-title-row {
+  margin-bottom: 1.5rem;
+}
+
+.section-title-row h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+  color: #2d181b;
+}
+
+.section-hint {
+  font-size: 0.875rem;
+  color: #7b585c;
+}
+
+.weddings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(28rem, 1fr));
+  gap: 2rem;
+}
+
+.wedding-admin-card {
+  background: #fff;
+  border: 1px solid #f0deda;
+  border-radius: 1.5rem;
+  padding: 1.75rem;
+  box-shadow: 0 8px 24px rgba(85, 42, 46, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.wedding-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.wedding-card-kicker {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #a95954;
+}
+
+.wedding-card-title {
+  margin: 0.2rem 0 0.35rem;
+  font-size: 1.45rem;
+  letter-spacing: -0.035em;
+  color: #2d181b;
+}
+
+.wedding-card-date {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #785a5e;
+}
+
+.status-badge-active {
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: #e8f5ec;
+  color: #3b8751;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+/* Link Box */
+.wedding-link-box {
+  background: #fcf6f4;
+  border: 1px solid #eddcd8;
+  border-radius: 1rem;
+  padding: 1rem 1.15rem;
+}
+
+.link-box-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #8c575a;
+  margin-bottom: 0.5rem;
+}
+
+.link-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.link-readonly-input {
+  flex: 1;
+  min-height: 2.6rem;
+  padding: 0 0.75rem;
+  background: #fff;
+  border: 1px solid #e5c9c5;
+  border-radius: 0.65rem;
+  font-size: 0.8125rem;
+  font-family: monospace;
+  color: #4a2e31;
+}
+
+.btn-copy {
+  padding: 0 1rem;
+  background: #a95954;
+  color: #fff;
+  border: 0;
+  border-radius: 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-open-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 1rem;
+  background: #fff;
+  border: 1px solid #debdb9;
+  color: #874946;
+  border-radius: 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.wedding-stats-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.stat-pill {
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  background: #fbf0ee;
+  color: #7b4b4e;
+  font-size: 0.8125rem;
+}
+
+.stat-pill strong {
+  color: #a95954;
+  font-size: 1rem;
+}
+
+/* Photo Feed */
+.wedding-photos-feed {
+  border-top: 1px solid #f3e5e2;
+  padding-top: 1.15rem;
+}
+
+.feed-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.feed-heading h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+  color: #2d181b;
+}
+
+.feed-live-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #4b8a5c;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.empty-feed-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #927578;
+  font-style: italic;
+}
+
+.photo-thumbnails-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+
+.photo-thumb-card {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: #f2e2de;
+  cursor: pointer;
+}
+
+.admin-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 150ms ease;
+}
+
+.photo-thumb-card:hover .admin-photo-img {
+  transform: scale(1.06);
+}
+
+.photo-thumb-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 0.35rem;
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.7) 100%);
+}
+
+.photo-guest-badge {
+  display: block;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ranking Compacto */
+.wedding-ranking-preview {
+  border-top: 1px solid #f3e5e2;
+  padding-top: 1rem;
+}
+
+.wedding-ranking-preview h4 {
+  margin: 0 0 0.65rem;
+  font-size: 0.875rem;
+  color: #5e4145;
+}
+
+.ranking-compact-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.5rem;
+  background: #fdf5f4;
+  font-size: 0.8125rem;
+}
+
+.rank-pos { font-weight: 800; color: #a95954; width: 1.5rem; }
+.rank-name { flex: 1; font-weight: 600; color: #342224; }
+.rank-score { font-weight: 800; color: #6e464a; }
+
+/* Modais */
+.modal-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  background: rgba(35, 20, 22, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.modal-window {
+  width: 100%;
+  max-width: 34rem;
+  background: #fff;
+  border-radius: 1.5rem;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 1.75rem;
+  border-bottom: 1px solid #f3e5e2;
+}
+
+.modal-header h2 { margin: 0; font-size: 1.4rem; color: #2d181b; }
+.modal-close-btn {
+  background: transparent;
+  border: 0;
+  font-size: 1.3rem;
+  color: #8c6e71;
+  cursor: pointer;
+}
+
+.modal-form { padding: 1.75rem; }
+.modal-subtitle { margin: 0 0 1.25rem; font-size: 0.875rem; color: #785a5e; line-height: 1.5; }
+
+.form-error-banner {
+  padding: 0.75rem 1rem;
+  background: #fdeeee;
+  border: 1px solid #f9cdcd;
+  border-radius: 0.75rem;
+  color: #a23d39;
+  font-size: 0.8125rem;
+  margin-bottom: 1.25rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-group { margin-bottom: 1.15rem; }
+.form-group label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  color: #4a3034;
+  margin-bottom: 0.35rem;
+}
+
+.form-group input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0 0.85rem;
+  border: 1px solid #dfc7c4;
+  border-radius: 0.75rem;
+  background: #fff;
+  outline: none;
+  font-size: 0.95rem;
+}
+
+.form-group input:focus {
+  border-color: #a95954;
+  box-shadow: 0 0 0 3px rgba(169, 89, 84, 0.15);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.btn-cancel {
+  padding: 0.75rem 1.25rem;
+  border: 1px solid #dfc7c4;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #6d4e52;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.photo-modal-card {
+  width: 100%;
+  max-width: 42rem;
+  background: #fff;
+  border-radius: 1.5rem;
+  overflow: hidden;
+}
+
+.photo-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f3e5e2;
+}
+
+.photo-modal-header h3 { margin: 0; font-size: 1.15rem; color: #2d181b; }
+.photo-modal-header p { margin: 0.2rem 0 0; font-size: 0.8125rem; color: #7b585c; }
+.photo-modal-body { padding: 1.25rem; text-align: center; }
+.photo-modal-full-img {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 0.85rem;
+  object-fit: contain;
+}
+
+/* ====================================================================
+   5. EXPERIÊNCIA DO CONVIDADO (MOBILE-FIRST PARA O JOGO DE CASAMENTO)
+   ==================================================================== */
 .wedding-themed {
   background: var(--wedding-background);
   color: var(--wedding-text);
   font-family: var(--wedding-body-font);
 }
-
-.commercial-page,
-.admin-auth-page,
-.admin-app-page {
-  min-height: 100dvh;
-  padding: max(2rem, env(safe-area-inset-top)) 1.25rem max(2rem, env(safe-area-inset-bottom));
-  color: #3e2528;
-  background: #fffaf8;
-}
-
-.commercial-page section,
-.admin-auth-page form,
-.admin-app-page > header,
-.admin-app-page > section {
-  width: min(100%, 42rem);
-  margin-inline: auto;
-  padding: 1.5rem;
-  border: 1px solid #f0d9d5;
-  border-radius: 1.25rem;
-  background: #fff;
-  box-shadow: 0 0.75rem 2rem rgba(85, 42, 46, 0.08);
-}
-
-.commercial-page h1,
-.admin-auth-page h1,
-.admin-app-page h1 { margin: 0.25rem 0 1rem; }
-
-.commercial-page a,
-.admin-auth-page a,
-.admin-auth-page button,
-.admin-app-page button {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
-  justify-content: center;
-  margin: 0.75rem 0.5rem 0 0;
-  padding: 0.75rem 1rem;
-  border: 0;
-  border-radius: 0.75rem;
-  color: #fff;
-  background: #a95954;
-  font: inherit;
-  text-decoration: none;
-}
-
-.admin-auth-page label,
-.admin-auth-page input { display: block; width: 100%; }
-.admin-auth-page label { margin-top: 1rem; font-weight: 700; }
-.admin-auth-page input { min-height: 2.75rem; margin-top: 0.4rem; padding-inline: 0.75rem; border: 1px solid #d8b9b5; border-radius: 0.75rem; }
-.admin-app-page > section { margin-top: 1rem; }
 
 .wedding-themed h1,
 .wedding-themed .welcome-title { font-family: var(--wedding-heading-font); }
@@ -167,34 +1600,6 @@ button { -webkit-tap-highlight-color: transparent; }
   text-transform: uppercase;
 }
 
-h1 {
-  margin: 0;
-  color: #3e2528;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2.7rem, 13vw, 4.3rem);
-  font-weight: 400;
-  letter-spacing: -0.07em;
-  line-height: 0.95;
-}
-
-h1 span { color: #bf756d; }
-
-.welcome-copy { margin-top: 3.25rem; }
-
-.welcome-title {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 750;
-  letter-spacing: -0.025em;
-}
-
-.welcome-description {
-  margin: 0.7rem 0 0;
-  color: #755e60;
-  font-size: 1rem;
-  line-height: 1.55;
-}
-
 .entry-form { margin-top: 2.25rem; }
 
 .entry-form label {
@@ -253,18 +1658,8 @@ h1 span { color: #bf756d; }
 }
 
 .entry-form button span { margin-left: 0.55rem; font-size: 1.25rem; }
-
 .entry-form button:active { background: #914a46; transform: scale(0.985); }
-
-.entry-form button:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-
-.entry-form button:focus-visible {
-  outline: 3px solid #3d292a;
-  outline-offset: 3px;
-}
+.entry-form button:disabled { cursor: wait; opacity: 0.65; }
 
 .welcome-footer {
   position: relative;
@@ -286,17 +1681,8 @@ h1 span { color: #bf756d; }
   pointer-events: none;
 }
 
-.welcome-glow-top {
-  top: -10rem;
-  right: -11rem;
-  background: #f4dbd3;
-}
-
-.welcome-glow-bottom {
-  bottom: -12rem;
-  left: -11rem;
-  background: #f5e6ce;
-}
+.welcome-glow-top { top: -10rem; right: -11rem; background: #f4dbd3; }
+.welcome-glow-bottom { bottom: -12rem; left: -11rem; background: #f5e6ce; }
 
 @media (min-width: 48rem) {
   .welcome-screen {
@@ -370,16 +1756,7 @@ h1 span { color: #bf756d; }
   padding: 0;
 }
 
-.guest-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.guest-avatar:focus-visible {
-  outline: 3px solid #3d292a;
-  outline-offset: 3px;
-}
+.guest-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
 .profile-overlay {
   position: fixed;
@@ -473,12 +1850,6 @@ h1 span { color: #bf756d; }
 .profile-form > input { min-height: 3rem; }
 .profile-form > textarea { resize: vertical; }
 
-.profile-form > input:focus,
-.profile-form > textarea:focus {
-  border-color: #bd716a;
-  box-shadow: 0 0 0 4px rgb(189 113 106 / 16%);
-}
-
 .profile-avatar-editor {
   display: flex;
   align-items: center;
@@ -503,20 +1874,7 @@ h1 span { color: #bf756d; }
   font-weight: 800;
 }
 
-.profile-avatar-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.profile-avatar-editor > div:last-child { min-width: 0; }
-
-.profile-avatar-editor p {
-  margin: 0.35rem 0 0;
-  color: #907c7c;
-  font-size: 0.72rem;
-  line-height: 1.35;
-}
+.profile-avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
 
 .profile-photo-picker,
 .profile-remove-avatar {
@@ -543,13 +1901,6 @@ h1 span { color: #bf756d; }
   color: #a23d39;
 }
 
-.profile-error {
-  margin: 0.35rem 0 0;
-  color: #a23d39;
-  font-size: 0.8125rem;
-  line-height: 1.35;
-}
-
 .profile-save,
 .profile-cancel {
   width: 100%;
@@ -570,13 +1921,6 @@ h1 span { color: #bf756d; }
   border: 1px solid #e5c9c5;
   background: #fff;
   color: #99524d;
-}
-
-.profile-sheet button:disabled,
-.profile-form input:disabled,
-.profile-form textarea:disabled {
-  cursor: wait;
-  opacity: 0.6;
 }
 
 .score-card {
@@ -627,13 +1971,6 @@ h1 span { color: #bf756d; }
   text-decoration: none;
 }
 
-.photos-shortcut:focus-visible,
-.back-link:focus-visible,
-.empty-photos a:focus-visible {
-  outline: 3px solid #3d292a;
-  outline-offset: 3px;
-}
-
 .photos-shortcut-count {
   display: grid;
   min-width: 1.35rem;
@@ -663,19 +2000,8 @@ h1 span { color: #bf756d; }
 }
 
 .score-progress span { display: block; }
-
-.score-progress span:first-child {
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-}
-
-.score-progress span:last-child {
-  margin-top: 0.12rem;
-  color: rgb(255 255 255 / 76%);
-  font-size: 0.7rem;
-  line-height: 1.2;
-}
+.score-progress span:first-child { font-size: 1.05rem; font-weight: 800; letter-spacing: -0.04em; }
+.score-progress span:last-child { margin-top: 0.12rem; color: rgb(255 255 255 / 76%); font-size: 0.7rem; line-height: 1.2; }
 
 .missions-section {
   max-width: 38rem;
@@ -814,13 +2140,6 @@ h1 span { color: #bf756d; }
   font-weight: 800;
 }
 
-.mission-action button:active { background: #f8ebe7; }
-
-.mission-action button:focus-visible {
-  outline: 3px solid #3d292a;
-  outline-offset: 2px;
-}
-
 .photo-preview-overlay {
   position: fixed;
   z-index: 10;
@@ -889,40 +2208,10 @@ h1 span { color: #bf756d; }
   color: #fff;
 }
 
-.use-photo-button:active { background: #914a46; }
-
 .retake-photo-button {
   border: 1px solid #e5c9c5;
   background: #fff;
   color: #99524d;
-}
-
-.retake-photo-button:active { background: #f8ebe7; }
-
-.photo-preview-actions button:focus-visible {
-  outline: 3px solid #3d292a;
-  outline-offset: 2px;
-}
-
-.photo-preview-actions button:disabled {
-  cursor: wait;
-  opacity: 0.65;
-}
-
-.preview-note {
-  margin: 0.9rem 0 0;
-  color: #907c7c;
-  font-size: 0.75rem;
-  line-height: 1.4;
-  text-align: center;
-}
-
-.preview-error {
-  margin: 0.85rem 0 0;
-  color: #a23d39;
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  text-align: center;
 }
 
 .my-photos-screen {
@@ -959,24 +2248,6 @@ h1 span { color: #bf756d; }
   line-height: 1;
 }
 
-.photos-header > p:last-child {
-  max-width: 27rem;
-  margin: 0.85rem 0 0;
-  color: #766265;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-
-.photos-feedback {
-  max-width: 38rem;
-  margin: 2rem auto;
-  color: #796568;
-  font-size: 0.9rem;
-  text-align: center;
-}
-
-.photos-error { color: #a23d39; }
-
 .empty-photos {
   max-width: 38rem;
   margin: 2.25rem auto 0;
@@ -998,34 +2269,6 @@ h1 span { color: #bf756d; }
   font-size: 1.3rem;
 }
 
-.empty-photos h2 {
-  margin: 0;
-  color: #3e2528;
-  font-size: 1.15rem;
-  letter-spacing: -0.035em;
-}
-
-.empty-photos p {
-  margin: 0.6rem 0 1.3rem;
-  color: #796568;
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.empty-photos a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.75rem;
-  border-radius: 0.75rem;
-  background: #a95954;
-  padding: 0 1rem;
-  color: #fff;
-  font-size: 0.8125rem;
-  font-weight: 800;
-  text-decoration: none;
-}
-
 .saved-photo-list {
   display: grid;
   gap: 0.9rem;
@@ -1039,29 +2282,6 @@ h1 span { color: #bf756d; }
   max-width: 38rem;
   margin: 2rem auto 0;
 }
-
-.photo-group-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.photo-group-heading h2 {
-  margin: 0;
-  color: #3e2528;
-  font-size: 1.05rem;
-  letter-spacing: -0.03em;
-}
-
-.photo-group-heading > span {
-  flex: 0 0 auto;
-  color: #9a7772;
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
-.mission-photo-group .saved-photo-list { margin-top: 0.75rem; }
 
 .saved-photo-card {
   display: grid;
@@ -1114,28 +2334,6 @@ h1 span { color: #bf756d; }
   color: #a23d39;
 }
 
-.saved-photo-actions button:disabled {
-  cursor: wait;
-  opacity: 0.55;
-}
-
-.saved-photo-actions button:focus-visible,
-.photo-viewer button:focus-visible {
-  outline: 3px solid #3d292a;
-  outline-offset: 2px;
-}
-
-.saved-photo-mission {
-  overflow: hidden;
-  margin: 0;
-  color: #3e2528;
-  font-size: 0.975rem;
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .photo-status {
   display: inline-flex;
   align-items: center;
@@ -1147,17 +2345,8 @@ h1 span { color: #bf756d; }
 }
 
 .photo-status-pending { color: #a56c42; }
-
 .photo-status-sent { color: #4b8a5c; }
-
 .photo-status-failed { color: #a23d39; }
-
-.photo-last-error {
-  margin: 0.35rem 0 0;
-  color: #8b4e49;
-  font-size: 0.72rem;
-  line-height: 1.35;
-}
 
 .photo-viewer-overlay {
   position: fixed;
@@ -1177,53 +2366,6 @@ h1 span { color: #bf756d; }
   border-radius: 1.25rem;
   background: #fffaf8;
   padding: 1rem;
-}
-
-.photo-viewer-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.85rem;
-}
-
-.photo-viewer-heading p {
-  margin: 0 0 0.2rem;
-  color: #a05b56;
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.photo-viewer-heading h2 {
-  margin: 0;
-  color: #3e2528;
-  font-size: 1.1rem;
-  letter-spacing: -0.03em;
-}
-
-.photo-viewer-heading button {
-  display: grid;
-  flex: 0 0 auto;
-  width: 2.75rem;
-  height: 2.75rem;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: #f4e6e3;
-  color: #704d4d;
-  cursor: pointer;
-  font-size: 1.5rem;
-}
-
-.photo-viewer > img {
-  display: block;
-  width: 100%;
-  max-height: calc(100dvh - 12rem);
-  border-radius: 0.8rem;
-  background: #ede2df;
-  object-fit: contain;
 }
 
 .close-photo-viewer {
@@ -1257,3 +2399,267 @@ h1 span { color: #bf756d; }
     padding: 2rem;
   }
 }
+
+/* ====================================================================
+   EXTRAS: Notices, Delete Button, Settings Page, Registration, Plans
+   ==================================================================== */
+
+/* Notices / info banners */
+.notice-info-banner {
+  padding: 0.9rem 1.15rem;
+  background: #eef4fd;
+  border: 1px solid #bdd5f5;
+  border-radius: 0.85rem;
+  color: #1d4b8c;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-bottom: 1.5rem;
+}
+
+.notice-success-banner {
+  padding: 0.9rem 1.15rem;
+  background: #eef9f1;
+  border: 1px solid #b5dfc1;
+  border-radius: 0.85rem;
+  color: #1d6b3a;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-bottom: 1.5rem;
+}
+
+.plans-notice {
+  max-width: 72rem;
+  margin-inline: auto;
+  margin-top: 0;
+}
+
+/* Plan button unavailable state */
+.btn-plan-unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.85rem 1.5rem;
+  border-radius: 0.75rem;
+  background: #f3f3f3;
+  color: #888;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: not-allowed;
+  border: 1px dashed #ccc;
+  text-align: center;
+}
+
+/* Wedding card delete button */
+.wedding-card-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.btn-delete-wedding {
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid #f0c4c0;
+  background: #fff7f6;
+  color: #c0392b;
+  font-size: 0.75rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.btn-delete-wedding:hover:not(:disabled) {
+  background: #fdedec;
+  border-color: #e8b2ad;
+}
+
+.btn-delete-wedding:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+/* Settings link in navbar */
+.admin-settings-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.6rem;
+  border: 1px solid #ded0cc;
+  background: #fff;
+  color: #634346;
+  font-size: 0.8125rem;
+  font-weight: 750;
+  text-decoration: none;
+  transition: all 150ms ease;
+}
+
+.admin-settings-link:hover {
+  background: #fbf4f2;
+  border-color: #cbb8b5;
+}
+
+/* Metric account email */
+.metric-account-email {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #7b585c;
+  word-break: break-all;
+  margin-top: 0.2rem;
+}
+
+/* Field-level error message */
+.field-error {
+  margin: 0.3rem 0 0;
+  color: #a23d39;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+/* Settings Page */
+.settings-page {
+  min-height: 100dvh;
+  background: #fbf8f6;
+  padding: 3rem 1.5rem 5rem;
+}
+
+.settings-container {
+  max-width: 44rem;
+  margin-inline: auto;
+}
+
+.settings-header {
+  margin-bottom: 2rem;
+}
+
+.settings-header h1 {
+  margin: 0 0 0.35rem;
+  font-size: 2rem;
+  letter-spacing: -0.04em;
+  color: #2d181b;
+}
+
+.settings-header p {
+  margin: 0;
+  font-size: 1rem;
+  color: #7b585c;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid #eedcd8;
+  margin-bottom: 2rem;
+}
+
+.settings-tab {
+  padding: 0.65rem 1.25rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: #7b585c;
+  font-size: 0.9rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 150ms ease;
+  margin-bottom: -1px;
+}
+
+.settings-tab:hover {
+  color: #a95954;
+}
+
+.settings-tab.active {
+  color: #a95954;
+  border-bottom-color: #a95954;
+}
+
+.settings-form {
+  display: grid;
+  gap: 0;
+  background: #fff;
+  border: 1px solid #f0deda;
+  border-radius: 1.25rem;
+  padding: 1.75rem;
+  box-shadow: 0 6px 20px rgba(85, 42, 46, 0.04);
+}
+
+.settings-success-banner {
+  padding: 0.9rem 1.15rem;
+  background: #eef9f1;
+  border: 1px solid #b5dfc1;
+  border-radius: 0.85rem;
+  color: #1d6b3a;
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.settings-form-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.label-hint {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #927578;
+  margin-left: 0.35rem;
+}
+
+.settings-subscription-info {
+  background: #fff;
+  border: 1px solid #f0deda;
+  border-radius: 1.25rem;
+  padding: 1.75rem;
+  box-shadow: 0 6px 20px rgba(85, 42, 46, 0.04);
+}
+
+.subscription-plan-card {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.plan-icon {
+  font-size: 2.5rem;
+  flex: 0 0 auto;
+}
+
+.subscription-plan-card strong {
+  display: block;
+  font-size: 1.1rem;
+  color: #2d181b;
+  margin-bottom: 0.4rem;
+}
+
+.subscription-plan-card p {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+  color: #6d4e52;
+  line-height: 1.5;
+}
+
+.plan-hint {
+  font-size: 0.8125rem !important;
+  color: #927578 !important;
+}
+
+.settings-back {
+  margin-top: 2.5rem;
+  text-align: center;
+}
+
+/* Empty weddings box */
+.empty-weddings-box {
+  padding: 3rem 2rem;
+  background: #fff;
+  border: 1px dashed #e0cbc8;
+  border-radius: 1.5rem;
+  text-align: center;
+}
+
+.empty-icon { font-size: 3rem; display: block; margin-bottom: 1rem; }
+.empty-weddings-box h3 { margin: 0 0 0.5rem; font-size: 1.4rem; color: #2d181b; letter-spacing: -0.03em; }
+.empty-weddings-box p { margin: 0 0 1.5rem; color: #7b585c; font-size: 0.95rem; }
+

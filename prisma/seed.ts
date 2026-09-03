@@ -10,6 +10,7 @@ import {
   WeddingTemplateTier,
 } from "../src/generated/prisma/client";
 import { defaultWeddingVisualConfig } from "../src/lib/templates/wedding-visual-config";
+import { setAdminPassword } from "../src/server/auth/admin-auth.service";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -277,6 +278,35 @@ async function main() {
     create: { publicId: sampleOrganizationPublicId, name: "Cerimonial Demonstração" },
     update: { name: "Cerimonial Demonstração" },
   });
+
+  const demoUser = await prisma.user.upsert({
+    where: { email: "cerimonial@demo.test" },
+    create: {
+      email: "cerimonial@demo.test",
+      name: "Cerimonialista Demo",
+      platformRole: "USER",
+    },
+    update: {
+      name: "Cerimonialista Demo",
+    },
+  });
+  await prisma.organizationMembership.upsert({
+    where: {
+      organizationId_userId: {
+        organizationId: organization.id,
+        userId: demoUser.id,
+      },
+    },
+    create: {
+      organizationId: organization.id,
+      userId: demoUser.id,
+      role: "OWNER",
+    },
+    update: {
+      role: "OWNER",
+    },
+  });
+  await setAdminPassword({ userId: demoUser.id, password: "cerimonial1234" });
 
   const classicTemplate = await prisma.weddingTemplate.upsert({
     where: { slug: "romance-classico" },

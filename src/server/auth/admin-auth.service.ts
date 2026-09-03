@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { cookies } from "next/headers";
-import { PlatformRole } from "@/generated/prisma/client";
+import { OrganizationRole, PlatformRole } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { DomainError } from "@/server/domain/error";
 
@@ -52,6 +52,140 @@ export async function setAdminPassword(input: { userId: string; password: unknow
     data: { passwordHash, passwordUpdatedAt: new Date() },
     select: { id: true, email: true, passwordUpdatedAt: true },
   });
+}
+
+export async function registerAdminUser(input: {
+  name: unknown;
+  email: unknown;
+  password: unknown;
+}) {
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  if (name.length < 2 || name.length > 80) {
+    throw new DomainError("INVALID_NAME", 400, "Informe um nome de 2 a 80 caracteres.");
+  }
+  const email = normalizeEmail(input.email);
+  const password = validatePassword(input.password);
+
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    throw new DomainError("USER_EMAIL_EXISTS", 409, "Este e-mail já está cadastrado. Faça login.");
+  }
+
+  const passwordHash = await hashPassword(password);
+  const user = await prisma.user.create({
+    data: {
+      email,
+      name,
+      passwordHash,
+      passwordUpdatedAt: new Date(),
+    },
+    select: { id: true, email: true, name: true, platformRole: true },
+  });
+
+  // Criar organização da cerimonialista
+  const organization = await prisma.organization.create({
+    data: {
+      name: `Cerimonial de ${name}`,
+      creditBalance: { create: { balance: 0 } },
+    },
+  });
+
+  await prisma.organizationMembership.create({
+    data: {
+      organizationId: organization.id,
+      userId: user.id,
+      role: OrganizationRole.OWNER,
+    },
+  });
+
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+  await prisma.adminSession.create({ data: { userId: user.id, tokenHash: tokenHash(token), expiresAt } });
+
+  return { token, expiresAt, user };
+}
+
+export async function checkUserIsPayingOrActive(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+
+  // O e-mail cerimonial@demo.test é sempre pagante/ativo para testes
+  if (user?.email === "cerimonial@demo.test") {
+    return true;
+  }
+
+  const memberships = await prisma.organizationMembership.findMany({
+    where: { userId },
+    select: { organizationId: true },
+  });
+
+  if (!memberships.length) return false;
+  const orgIds = memberships.map((m) => m.organizationId);
+
+  const [balances, subscriptions, weddings] = await Promise.all([
+    prisma.organizationCreditBalance.findMany({
+      where: { organizationId: { in: orgIds }, balance: { gt: 0 } },
+    }),
+    prisma.organizationSubscription.findMany({
+      where: { organizationId: { in: orgIds }, status: { in: ["ACTIVE", "PAST_DUE"] } },
+    }),
+    prisma.wedding.findMany({
+      where: { organizationId: { in: orgIds } },
+      select: { id: true },
+      take: 1,
+    }),
+  ]);
+
+  return balances.length > 0 || subscriptions.length > 0 || weddings.length > 0;
+}
+
+export async function updateAdminProfile(input: {
+  userId: string;
+  name?: unknown;
+  email?: unknown;
+  currentPassword?: unknown;
+  newPassword?: unknown;
+}) {
+  const user = await prisma.user.findUnique({
+    where: { id: input.userId },
+    select: { id: true, email: true, name: true, passwordHash: true },
+  });
+
+  if (!user) throw new DomainError("USER_NOT_FOUND", 404, "Usuário não encontrado.");
+
+  const updateData: { name?: string; email?: string; passwordHash?: string; passwordUpdatedAt?: Date } = {};
+
+  if (typeof input.name === "string" && input.name.trim().length >= 2) {
+    updateData.name = input.name.trim();
+  }
+
+  if (input.email && typeof input.email === "string") {
+    const newEmail = normalizeEmail(input.email);
+    if (newEmail !== user.email) {
+      const existing = await prisma.user.findUnique({ where: { email: newEmail } });
+      if (existing) throw new DomainError("EMAIL_IN_USE", 409, "Este e-mail já está em uso.");
+      updateData.email = newEmail;
+    }
+  }
+
+  if (input.newPassword) {
+    if (!user.passwordHash || typeof input.currentPassword !== "string" || !(await verifyPassword(input.currentPassword, user.passwordHash))) {
+      throw new DomainError("INVALID_CURRENT_PASSWORD", 400, "Senha atual incorreta.");
+    }
+    const newPass = validatePassword(input.newPassword);
+    updateData.passwordHash = await hashPassword(newPass);
+    updateData.passwordUpdatedAt = new Date();
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: input.userId },
+    data: updateData,
+    select: { id: true, email: true, name: true },
+  });
+
+  return updatedUser;
 }
 
 export async function authenticateAdmin(input: { email: unknown; password: unknown }) {
