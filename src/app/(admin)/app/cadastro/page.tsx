@@ -21,11 +21,12 @@ function RegisterForm() {
     const email = (data.get("email") as string).trim();
     const password = data.get("password") as string;
     const confirm = data.get("confirm") as string;
+    const customerType = data.get("customerType") as string;
 
     const errors: typeof fieldErrors = {};
     if (name.length < 2) errors.name = "Informe seu nome completo.";
     if (!email) errors.email = "Informe um e-mail válido.";
-    if (password.length < 12) errors.password = "A senha deve ter pelo menos 12 caracteres.";
+    if (password.length < 6) errors.password = "A senha deve ter pelo menos 6 caracteres.";
     if (password !== confirm) errors.password = "As senhas não coincidem.";
     if (Object.keys(errors).length) { setFieldErrors(errors); return; }
 
@@ -34,7 +35,7 @@ function RegisterForm() {
         const res = await fetch("/api/admin/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, password }),
+          body: JSON.stringify({ name, email, password, customerType }),
         });
         const json = (await res.json()) as { redirectPath?: string; error?: { message?: string } };
         if (!res.ok) {
@@ -66,8 +67,16 @@ function RegisterForm() {
         </div>
 
         <div className="login-field">
+          <label htmlFor="customerType">Você está se cadastrando como</label>
+          <select id="customerType" name="customerType" defaultValue="CEREMONIALIST">
+            <option value="CEREMONIALIST">Cerimonialista</option>
+            <option value="COUPLE">Casal</option>
+          </select>
+        </div>
+
+        <div className="login-field">
           <label htmlFor="password">Senha de Acesso</label>
-          <input id="password" name="password" type="password" autoComplete="new-password" placeholder="Mínimo 12 caracteres" required />
+          <input id="password" name="password" type="password" autoComplete="new-password" placeholder="Mínimo 6 caracteres" required />
           {fieldErrors.password && <p className="field-error">{fieldErrors.password}</p>}
         </div>
 
@@ -94,8 +103,8 @@ export default function AdminRegisterPage() {
               <span className="brand-icon">💍</span>
               <span className="brand-name">SiteCasamento</span>
             </Link>
-            <h1>Criar Conta de Cerimonialista</h1>
-            <p>Cadastre-se para começar a criar experiências fotográficas nos seus casamentos.</p>
+            <h1>Criar sua conta</h1>
+            <p>Cadastre-se como casal ou cerimonialista para criar experiências fotográficas nos seus casamentos.</p>
           </div>
 
           <Suspense fallback={null}>

@@ -17,6 +17,13 @@ export type PublicWedding = {
   status: "DRAFT" | "ACTIVE" | "CLOSED" | "ARCHIVED";
 };
 
+export type PublicWeddingResponse = Pick<
+  PublicWedding,
+  "publicId" | "slug" | "name" | "brideName" | "groomName" | "eventDate" | "status"
+>;
+
+const SECURE_WEDDING_TOKEN_PATTERN = /^evt_[a-f0-9]{32}$/;
+
 /**
  * Gera um token público opaco, não enumerável e criptograficamente seguro.
  * Exemplo: evt_4a8b1c9e2f3d4e5a6b7c8d9e0f1a2b3c
@@ -24,6 +31,22 @@ export type PublicWedding = {
 export function generateSecureWeddingToken(): string {
   const randomPart = crypto.randomBytes(16).toString("hex");
   return `evt_${randomPart}`;
+}
+
+export function isSecureWeddingToken(value: string): boolean {
+  return SECURE_WEDDING_TOKEN_PATTERN.test(value);
+}
+
+export function toPublicWeddingResponse(wedding: PublicWedding): PublicWeddingResponse {
+  return {
+    publicId: wedding.publicId,
+    slug: wedding.slug,
+    name: wedding.name,
+    brideName: wedding.brideName,
+    groomName: wedding.groomName,
+    eventDate: wedding.eventDate,
+    status: wedding.status,
+  };
 }
 
 export async function findWeddingByIdentifier(identifier: string): Promise<PublicWedding> {
@@ -72,7 +95,7 @@ export async function findWeddingByPublicAccessToken(rawToken: string): Promise<
     throw new DomainError("INVALID_EVENT_TOKEN", 400, "Token do casamento inválido.");
   }
   const publicId = rawToken.trim();
-  if (publicId.length < 16 || publicId.length > 100) {
+  if (!isSecureWeddingToken(publicId)) {
     throw new DomainError("INVALID_EVENT_TOKEN", 404, "Casamento não encontrado.");
   }
 

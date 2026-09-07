@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import {
+  AccountStatus,
+  CustomerType,
+  ManualAccessPlanStatus,
   OrganizationRole,
+  PlatformRole,
   PhotoModerationStatus,
   Prisma,
   ScoreEntrySource,
@@ -18,18 +22,36 @@ import {
   findWeddingByIdentifier,
   findWeddingByPublicAccessToken,
   generateSecureWeddingToken,
+  isSecureWeddingToken,
   restoreWeddingPublicAccess,
   revokeWeddingPublicAccess,
   rotateWeddingPublicToken,
 } from "../src/server/events/wedding.service";
 import { getActiveEventView } from "../src/server/events/event-view.service";
+import { createAdminWedding, deleteAdminWedding, getAdminDashboardData, getAdminPhotoStream, getAdminWeddingGallery } from "../src/server/admin/admin-weddings.service";
 import { findWeddingForOrganizationUser } from "../src/server/organizations/organization-access.service";
 import {
   authenticateAdmin,
+  authenticatePlatformAdministrator,
   getAdminSessionFromToken,
+  getAdminSubscriptionSummary,
+  getPlatformSessionFromToken,
+  provisionPlatformAdministrator,
+  registerAdminUser,
   revokeAdminSession,
   setAdminPassword,
 } from "../src/server/auth/admin-auth.service";
+import {
+  getPlatformCustomerDetails,
+  getPlatformCustomers,
+  getPlatformDashboardData,
+  createPlatformManualAccessPlan,
+  updatePlatformCustomerStatus,
+} from "../src/server/platform/platform-dashboard.service";
+import {
+  calculateManualPlanEndDate,
+  reconcileManualAccessPlansForOrganizations,
+} from "../src/server/billing/manual-access-plan.service";
 import {
   activateOrganizationSubscription,
   activateWeddingWithCredit,
@@ -57,11 +79,12 @@ import {
   uploadMissionPhoto,
   type UploadPhotoFile,
 } from "../src/server/uploads/photo-upload.service";
+import { assertRateLimit, resetRateLimitForTests } from "../src/server/http/rate-limit";
 
 const testSuffix = crypto.randomUUID();
-const eventAToken = `evt_test_a_${testSuffix}`;
+const eventAToken = generateSecureWeddingToken();
 const eventASlug = `test-a-${testSuffix}`;
-const eventBToken = `evt_test_b_${testSuffix}`;
+const eventBToken = generateSecureWeddingToken();
 const eventBSlug = `test-b-${testSuffix}`;
 const testPublicAccessStartsAt = new Date("2020-01-01T00:00:00.000Z");
 const testPublicAccessEndsAt = new Date("2035-01-01T00:00:00.000Z");
@@ -128,6 +151,18 @@ class FailingStorage implements ObjectStorage {
 
   async delete() {}
 }
+
+test("rate limiting local bloqueia excesso e libera uma nova janela", () => {
+  resetRateLimitForTests();
+  assertRateLimit({ namespace: "test", key: "ip", limit: 2, windowMs: 1_000, now: 1_000 });
+  assertRateLimit({ namespace: "test", key: "ip", limit: 2, windowMs: 1_000, now: 1_100 });
+  assert.throws(
+    () => assertRateLimit({ namespace: "test", key: "ip", limit: 2, windowMs: 1_000, now: 1_200 }),
+    (error: unknown) => error instanceof DomainError && error.code === "RATE_LIMITED",
+  );
+  assertRateLimit({ namespace: "test", key: "ip", limit: 2, windowMs: 1_000, now: 2_000 });
+  resetRateLimitForTests();
+});
 
 before(async () => {
   const [freeTemplate, premiumTemplate] = await Promise.all([
@@ -258,7 +293,7 @@ test("localiza o mesmo casamento por slug e token público", async () => {
   assert.equal(publicEvent.publicPath, `/w/${eventAToken}`);
   await assert.rejects(
     () => getActiveEventView(eventASlug),
-    (error: unknown) => error instanceof DomainError && error.code === "EVENT_NOT_FOUND",
+    (error: unknown) => error instanceof DomainError && error.code === "INVALID_EVENT_TOKEN",
   );
 });
 
@@ -266,7 +301,7 @@ test("janela pública expirada bloqueia convidados sem apagar o casamento", asyn
   const expiredWedding = await prisma.wedding.create({
     data: {
       organizationId: organizationAId,
-      publicId: `expired-event-${testSuffix}`,
+      publicId: generateSecureWeddingToken(),
       name: "Evento expirado",
       brideName: "Lia",
       groomName: "Marcos",
@@ -296,6 +331,162 @@ test("login administrativo usa senha com hash e sessão opaca revogável", async
   assert.equal(await getAdminSessionFromToken(session.token), null);
 });
 
+test("área interna da plataforma rejeita sessão comum e protege dados no backend", async () => {
+  const regularUser = await prisma.user.create({
+    data: { email: `regular-platform-${crypto.randomUUID()}@example.test`, name: "Usuário comum" },
+  });
+  await setAdminPassword({ userId: regularUser.id, password: "senha-comum-de-teste-123" });
+  const regularSession = await authenticateAdmin({
+    email: regularUser.email,
+    password: "senha-comum-de-teste-123",
+  });
+
+  assert.equal(await getPlatformSessionFromToken(regularSession.token), null);
+  await assert.rejects(
+    () => authenticatePlatformAdministrator({ email: regularUser.email, password: "senha-comum-de-teste-123" }),
+    (error: unknown) => error instanceof DomainError && error.code === "INVALID_CREDENTIALS",
+  );
+  await assert.rejects(
+    () => getPlatformDashboardData(regularUser.id),
+    (error: unknown) => error instanceof DomainError && error.code === "PLATFORM_ADMIN_REQUIRED",
+  );
+
+  const owner = await provisionPlatformAdministrator({
+    email: `owner-platform-${crypto.randomUUID()}@example.test`,
+    password: "senha-do-dono-da-plataforma-123",
+    name: "Dono da plataforma",
+  });
+  const platformSession = await authenticatePlatformAdministrator({
+    email: owner.email,
+    password: "senha-do-dono-da-plataforma-123",
+  });
+  const authenticatedOwner = await getPlatformSessionFromToken(platformSession.token);
+  assert.equal(authenticatedOwner?.id, owner.id);
+  assert.equal(authenticatedOwner?.platformRole, PlatformRole.PLATFORM_ADMIN);
+
+  const dashboard = await getPlatformDashboardData(owner.id);
+  assert.ok(dashboard.metrics.users >= 2);
+});
+
+test("administrador da plataforma pesquisa clientes e pode suspender ou reativar a conta", async () => {
+  const owner = await provisionPlatformAdministrator({
+    email: `customers-owner-${crypto.randomUUID()}@example.test`,
+    password: "senha-do-dono-dos-clientes-123",
+  });
+  const email = `couple-${crypto.randomUUID()}@example.test`;
+  const registration = await registerAdminUser({
+    name: "Casal de teste",
+    email,
+    password: "senha-do-casal-de-teste-123",
+    customerType: CustomerType.COUPLE,
+  });
+
+  const list = await getPlatformCustomers({ userId: owner.id, search: "casal de teste" });
+  const listedCustomer = list.customers.find((customer) => customer.id === registration.user.id);
+  assert.equal(listedCustomer?.customerType, CustomerType.COUPLE);
+  assert.equal(listedCustomer?.accountStatus, AccountStatus.ACTIVE);
+  assert.equal(listedCustomer?.creditsAvailable, 0);
+
+  const details = await getPlatformCustomerDetails({ userId: owner.id, customerId: registration.user.id });
+  assert.equal(details.customer.email, email);
+  assert.equal(details.organizations.length, 1);
+
+  const suspended = await updatePlatformCustomerStatus({
+    userId: owner.id,
+    customerId: registration.user.id,
+    accountStatus: AccountStatus.SUSPENDED,
+  });
+  assert.equal(suspended.accountStatus, AccountStatus.SUSPENDED);
+  await assert.rejects(
+    () => authenticateAdmin({ email, password: "senha-do-casal-de-teste-123" }),
+    (error: unknown) => error instanceof DomainError && error.code === "INVALID_CREDENTIALS",
+  );
+
+  await updatePlatformCustomerStatus({
+    userId: owner.id,
+    customerId: registration.user.id,
+    accountStatus: AccountStatus.ACTIVE,
+  });
+  const restored = await authenticateAdmin({ email, password: "senha-do-casal-de-teste-123" });
+  assert.equal(restored.user.id, registration.user.id);
+});
+
+test("liberação manual por PIX preserva histórico e concede créditos mensais uma única vez", async () => {
+  const owner = await provisionPlatformAdministrator({
+    email: `pix-owner-${crypto.randomUUID()}@example.test`,
+    password: "senha-do-dono-pix-manual-123",
+  });
+  const customer = await registerAdminUser({
+    name: "Cerimonialista Maria",
+    email: `maria-pix-${crypto.randomUUID()}@example.test`,
+    password: "senha-da-maria-pix-teste-123",
+  });
+  const customerDetails = await getPlatformCustomerDetails({ userId: owner.id, customerId: customer.user.id });
+  const organizationId = customerDetails.organizations[0]!.id;
+  const startDate = new Date();
+  const startDateText = startDate.toISOString().slice(0, 10);
+
+  const plan = await createPlatformManualAccessPlan({
+    userId: owner.id,
+    customerId: customer.user.id,
+    organizationId,
+    durationMonths: 2,
+    creditsPerMonth: 2,
+    startDate: startDateText,
+    status: ManualAccessPlanStatus.ACTIVE,
+  });
+  assert.equal(plan.status, ManualAccessPlanStatus.ACTIVE);
+  assert.deepEqual(plan.endDate, calculateManualPlanEndDate(new Date(`${startDateText}T00:00:00.000Z`), 2));
+  assert.equal((await prisma.organizationCreditBalance.findUniqueOrThrow({ where: { organizationId } })).balance, 2);
+  let details = await getPlatformCustomerDetails({ userId: owner.id, customerId: customer.user.id });
+  let registeredPlan = details.organizations[0]!.manualAccessPlans.find((candidate) => candidate.id === plan.id);
+  assert.equal(details.creditSummary.received, 2);
+  assert.equal(details.creditSummary.used, 0);
+  assert.equal(details.creditSummary.available, 2);
+  assert.equal(registeredPlan?.lastCreditReleasedAt?.toISOString().slice(0, 10), startDateText);
+  assert.notEqual(registeredPlan?.nextCreditReleaseAt, null);
+  const customerSubscription = await getAdminSubscriptionSummary(customer.user.id);
+  assert.equal(customerSubscription.plan?.durationMonths, 2);
+  assert.equal(customerSubscription.plan?.creditsPerMonth, 2);
+  assert.equal(customerSubscription.creditsAvailable, 2);
+
+  const wedding = await prisma.wedding.create({
+    data: {
+      organizationId,
+      publicId: generateSecureWeddingToken(),
+      name: "Casamento da Maria",
+      brideName: "Maria",
+      groomName: "João",
+      publicAccessStartsAt: new Date(),
+      publicAccessEndsAt: new Date(Date.now() + 86_400_000),
+      status: WeddingStatus.DRAFT,
+    },
+  });
+  await activateWeddingWithCredit({ organizationId, weddingId: wedding.id });
+  details = await getPlatformCustomerDetails({ userId: owner.id, customerId: customer.user.id });
+  assert.equal(details.creditSummary.received, 2);
+  assert.equal(details.creditSummary.used, 1);
+  assert.equal(details.creditSummary.available, 1);
+
+  const nextCycle = new Date(startDate);
+  nextCycle.setUTCMonth(nextCycle.getUTCMonth() + 1);
+  await reconcileManualAccessPlansForOrganizations([organizationId], nextCycle);
+  await reconcileManualAccessPlansForOrganizations([organizationId], nextCycle);
+  assert.equal((await prisma.organizationCreditBalance.findUniqueOrThrow({ where: { organizationId } })).balance, 3);
+  assert.equal(await prisma.creditLedgerEntry.count({ where: { organizationId, idempotencyKey: { startsWith: `manual-access-plan:${plan.id}:` } } }), 2);
+  details = await getPlatformCustomerDetails({ userId: owner.id, customerId: customer.user.id });
+  registeredPlan = details.organizations[0]!.manualAccessPlans.find((candidate) => candidate.id === plan.id);
+  assert.equal(details.creditSummary.received, 4);
+  assert.equal(details.creditSummary.used, 1);
+  assert.equal(details.creditSummary.available, 3);
+  assert.equal(registeredPlan?.nextCreditReleaseAt, null);
+
+  const afterEnd = new Date(plan.endDate);
+  afterEnd.setUTCDate(afterEnd.getUTCDate() + 1);
+  await reconcileManualAccessPlansForOrganizations([organizationId], afterEnd);
+  assert.equal((await prisma.manualAccessPlan.findUniqueOrThrow({ where: { id: plan.id } })).status, ManualAccessPlanStatus.EXPIRED);
+});
+
 test("usuários administrativos só resolvem casamentos da própria organização", async () => {
   const ownWedding = await findWeddingForOrganizationUser({
     userId: userAId,
@@ -312,6 +503,43 @@ test("usuários administrativos só resolvem casamentos da própria organizaçã
     }),
     (error: unknown) => error instanceof DomainError && error.code === "ORGANIZATION_ACCESS_DENIED",
   );
+});
+
+test("membro da equipe pode consultar, mas não cria casamentos", async () => {
+  const member = await prisma.user.create({
+    data: { email: `member-${crypto.randomUUID()}@example.test`, name: "Membro de teste" },
+  });
+  await prisma.organizationMembership.create({
+    data: { organizationId: organizationAId, userId: member.id, role: OrganizationRole.MEMBER },
+  });
+
+  await assert.rejects(
+    () => createAdminWedding({ userId: member.id, brideName: "Noiva", groomName: "Noivo" }),
+    (error: unknown) => error instanceof DomainError && error.code === "ORGANIZATION_MANAGEMENT_DENIED",
+  );
+});
+
+test("a criação de casamento consome um crédito e bloqueia o segundo sem saldo", async () => {
+  await prisma.organizationCreditBalance.upsert({
+    where: { organizationId: organizationBId },
+    create: { organizationId: organizationBId, balance: 1 },
+    update: { balance: 1 },
+  });
+
+  const firstWedding = await createAdminWedding({
+    userId: userBId,
+    brideName: "Noiva com crédito",
+    groomName: "Noivo com crédito",
+  });
+  assert.equal(firstWedding.status, WeddingStatus.ACTIVE);
+  assert.equal((await prisma.wedding.findUniqueOrThrow({ where: { id: firstWedding.id } })).status, WeddingStatus.ACTIVE);
+  assert.equal((await prisma.organizationCreditBalance.findUniqueOrThrow({ where: { organizationId: organizationBId } })).balance, 0);
+
+  await assert.rejects(
+    () => createAdminWedding({ userId: userBId, brideName: "Segunda noiva", groomName: "Segundo noivo" }),
+    (error: unknown) => error instanceof DomainError && error.code === "INSUFFICIENT_CREDITS",
+  );
+  assert.equal(await prisma.wedding.count({ where: { organizationId: organizationBId, brideName: "Segunda noiva" } }), 0);
 });
 
 test("créditos comerciais são auditáveis, recorrentes e consumidos uma única vez na ativação", async () => {
@@ -367,7 +595,7 @@ test("créditos comerciais são auditáveis, recorrentes e consumidos uma única
   const creditWedding = await prisma.wedding.create({
     data: {
       organizationId: organizationAId,
-      publicId: `credit-wedding-${testSuffix}`,
+      publicId: generateSecureWeddingToken(),
       name: "Casamento com crédito",
       brideName: "Gabi",
       groomName: "Hugo",
@@ -400,7 +628,7 @@ test("créditos comerciais são auditáveis, recorrentes e consumidos uma única
   const noCreditWedding = await prisma.wedding.create({
     data: {
       organizationId: organizationBId,
-      publicId: `no-credit-wedding-${testSuffix}`,
+      publicId: generateSecureWeddingToken(),
       name: "Casamento sem crédito",
       brideName: "Iara",
       groomName: "Jonas",
@@ -465,7 +693,7 @@ test("o banco bloqueia vínculos entre organizações e entre casamentos", async
   const otherWeddingInOrganizationA = await prisma.wedding.create({
     data: {
       organizationId: organizationAId,
-      publicId: `evt_test_same_org_${crypto.randomUUID()}`,
+      publicId: generateSecureWeddingToken(),
       name: "Outro evento da organização A",
       brideName: "Elisa",
       groomName: "Fábio",
@@ -568,6 +796,15 @@ test("identifica o convidado apenas dentro do próprio casamento", async () => {
   assert.equal(secondAccess.guest.id, guestAId);
   assert.equal(secondAccess.guest.name, "Marina");
   assert.equal(secondAccess.guest.email, "marina@example.test");
+
+  const renamedAccess = await registerOrIdentifyGuest(eventAToken, {
+    name: "Marina Souza",
+    email: "marina@example.test",
+    guestToken: guestAToken,
+  });
+  assert.equal(renamedAccess.created, false);
+  assert.equal(renamedAccess.guest.id, guestAId);
+  assert.equal(renamedAccess.guest.name, "Marina Souza");
 
   const differentName = await registerOrIdentifyGuest(eventAToken, {
     name: "Outro convidado",
@@ -879,14 +1116,14 @@ test("rejeita tokens inválidos, curtos, vazios, não existentes e IDs numérico
     (error: unknown) => error instanceof DomainError && error.code === "INVALID_EVENT_TOKEN",
   );
   await assert.rejects(
-    () => findWeddingByPublicAccessToken("evt_token_inexistente_1234567890abcdef"),
+    () => findWeddingByPublicAccessToken("evt_0123456789abcdef0123456789abcdef"),
     (error: unknown) => error instanceof DomainError && error.code === "EVENT_NOT_FOUND",
   );
 
   // Slug legível não é aceito como token público no getActiveEventView
   await assert.rejects(
     () => getActiveEventView(eventASlug),
-    (error: unknown) => error instanceof DomainError && error.code === "EVENT_NOT_FOUND",
+    (error: unknown) => error instanceof DomainError && error.code === "INVALID_EVENT_TOKEN",
   );
 });
 
@@ -1132,4 +1369,150 @@ test("isolamento estrito entre casamentos impede que convidados acessem ou envie
     () => findWeddingByPublicAccessToken("9876543210123456"),
     (error: unknown) => error instanceof DomainError && error.code === "INVALID_EVENT_TOKEN",
   );
+});
+
+test("tokens de casamento sao aleatorios, opacos e seguem o formato seguro", () => {
+  const first = generateSecureWeddingToken();
+  const second = generateSecureWeddingToken();
+  assert.equal(isSecureWeddingToken(first), true);
+  assert.equal(isSecureWeddingToken(second), true);
+  assert.notEqual(first, second);
+  assert.equal(isSecureWeddingToken("evt_demo_ana_joao_4f2h7k"), false);
+  assert.equal(isSecureWeddingToken("ana-e-joao"), false);
+});
+
+test("cerimonialista continua acessando fotos apos a expiracao do link publico", async () => {
+  const expiredToken = generateSecureWeddingToken();
+  const wedding = await prisma.wedding.create({
+    data: {
+      organizationId: organizationAId,
+      publicId: expiredToken,
+      name: "Casamento expirado com fotos",
+      brideName: "Nina",
+      groomName: "OtÃ¡vio",
+      status: WeddingStatus.ACTIVE,
+      publicAccessStartsAt: new Date("2020-01-01T00:00:00.000Z"),
+      publicAccessEndsAt: new Date("2020-01-02T00:00:00.000Z"),
+    },
+  });
+  const mission = await prisma.mission.create({
+    data: { organizationId: organizationAId, weddingId: wedding.id, title: "Foto arquivada", points: 10, displayOrder: 1 },
+  });
+  const guest = await prisma.guest.create({
+    data: { organizationId: organizationAId, weddingId: wedding.id, name: "Convidado arquivado" },
+  });
+  const storage = new MemoryStorage();
+  const submission = await prisma.submission.create({
+    data: {
+      organizationId: organizationAId,
+      weddingId: wedding.id,
+      guestId: guest.id,
+      missionId: mission.id,
+      status: SubmissionStatus.UPLOADED,
+      photo: {
+        create: {
+          storageKey: "tests/expired-admin/photo.jpg",
+          originalName: "photo.jpg",
+          contentType: "image/jpeg",
+          sizeBytes: jpegBytes.byteLength,
+        },
+      },
+    },
+    select: { photo: { select: { id: true } } },
+  });
+  storage.objects.set("tests/expired-admin/photo.jpg", jpegBytes);
+
+  await assert.rejects(
+    () => getActiveEventView(expiredToken),
+    (error: unknown) => error instanceof DomainError && error.code === "EVENT_UNAVAILABLE",
+  );
+  const photo = await getAdminPhotoStream({ userId: userAId, photoId: submission.photo!.id, storage });
+  assert.deepEqual(photo.body, jpegBytes);
+  const gallery = await getAdminWeddingGallery({ userId: userAId, weddingId: wedding.id });
+  assert.equal(gallery.photos.some((item) => item.id === submission.photo!.id), true);
+  assert.equal((await getAdminDashboardData(userAId)).weddings.some((item) => item.id === wedding.id), true);
+});
+
+test("galeria administrativa pagina e filtra fotos por convidado e missao", async () => {
+  const guest = await prisma.guest.create({
+    data: { organizationId: organizationAId, weddingId: eventAId, name: "Convidado da galeria" },
+  });
+  await prisma.submission.create({
+    data: {
+      organizationId: organizationAId,
+      weddingId: eventAId,
+      guestId: guest.id,
+      missionId: missionAId,
+      status: SubmissionStatus.UPLOADED,
+      photo: {
+        create: {
+          storageKey: `tests/gallery/${crypto.randomUUID()}.jpg`,
+          originalName: "gallery.jpg",
+          contentType: "image/jpeg",
+          sizeBytes: jpegBytes.byteLength,
+        },
+      },
+    },
+  });
+
+  const filtered = await getAdminWeddingGallery({
+    userId: userAId,
+    weddingId: eventAId,
+    guestId: guest.id,
+    missionId: missionAId,
+    pageSize: 1,
+  });
+  assert.equal(filtered.pagination.total, 1);
+  assert.equal(filtered.pagination.totalPages, 1);
+  assert.equal(filtered.photos[0]?.guestName, "Convidado da galeria");
+  assert.equal(filtered.photos[0]?.missionId, missionAId);
+
+  const secondPage = await getAdminWeddingGallery({
+    userId: userAId,
+    weddingId: eventAId,
+    guestId: guest.id,
+    missionId: missionAId,
+    page: 2,
+    pageSize: 1,
+  });
+  assert.equal(secondPage.photos.length, 0);
+});
+
+test("exclusao de casamento exige senha e preserva o livro caixa", async () => {
+  const password = "senha-exclusao-123";
+  await setAdminPassword({ userId: userAId, password });
+  const wedding = await prisma.wedding.create({
+    data: {
+      organizationId: organizationAId,
+      publicId: generateSecureWeddingToken(),
+      name: "Casamento para exclusao",
+      brideName: "Luna",
+      groomName: "Ravi",
+      status: WeddingStatus.ACTIVE,
+      publicAccessStartsAt: testPublicAccessStartsAt,
+      publicAccessEndsAt: testPublicAccessEndsAt,
+    },
+  });
+  const entry = await prisma.creditLedgerEntry.create({
+    data: {
+      organizationId: organizationAId,
+      weddingId: wedding.id,
+      type: "WEDDING_ACTIVATION",
+      delta: -1,
+      balanceAfter: 0,
+      idempotencyKey: `delete-wedding-${testSuffix}`,
+      description: "Credito consumido na ativacao do casamento.",
+    },
+  });
+
+  await assert.rejects(
+    () => deleteAdminWedding({ userId: userAId, weddingId: wedding.id, password: "senha-incorreta" }),
+    (error: unknown) => error instanceof DomainError && error.code === "INVALID_CURRENT_PASSWORD",
+  );
+  assert.equal((await prisma.wedding.findUnique({ where: { id: wedding.id } }))?.id, wedding.id);
+
+  const result = await deleteAdminWedding({ userId: userAId, weddingId: wedding.id, password });
+  assert.equal(result.deleted, true);
+  assert.equal(await prisma.wedding.findUnique({ where: { id: wedding.id } }), null);
+  assert.equal((await prisma.creditLedgerEntry.findUniqueOrThrow({ where: { id: entry.id } })).weddingId, null);
 });

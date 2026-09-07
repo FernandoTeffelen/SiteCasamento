@@ -1,8 +1,14 @@
 import { prisma } from "@/server/db/prisma";
 import { DomainError } from "@/server/domain/error";
-import { generateSecureWeddingToken } from "@/server/events/wedding.service";
+import {
+  generateSecureWeddingToken,
+  restoreWeddingPublicAccess,
+  revokeWeddingPublicAccess,
+} from "@/server/events/wedding.service";
 import { objectStorage } from "@/server/storage/object-storage";
-import { WeddingStatus, WeddingTemplateTier } from "@/generated/prisma/client";
+import { activateWeddingWithCredit } from "@/server/billing/credit.service";
+import { confirmAdminPassword } from "@/server/auth/admin-auth.service";
+import { OrganizationRole, WeddingStatus, WeddingTemplateTier } from "@/generated/prisma/client";
 import { defaultWeddingVisualConfig } from "@/lib/templates/wedding-visual-config";
 
 export type AdminDashboardWedding = {
@@ -34,9 +40,38 @@ export type AdminDashboardWedding = {
   }>;
 };
 
+export type AdminGalleryPhoto = {
+  id: string;
+  guestId: string;
+  guestName: string;
+  missionId: string;
+  missionTitle: string;
+  contentType: string;
+  createdAt: Date;
+};
+
+async function findAdminMembership(userId: string, options: { manage?: boolean } = {}) {
+  // A interface ainda trabalha com uma organização por vez; a ordenação torna
+  // essa escolha determinística para usuários que participam de mais de uma.
+  const membership = await prisma.organizationMembership.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+    select: { organizationId: true, role: true },
+  });
+
+  if (!membership) {
+    throw new DomainError("ORGANIZATION_ACCESS_DENIED", 403, "Organization access denied.");
+  }
+  if (options.manage && membership.role === OrganizationRole.MEMBER) {
+    throw new DomainError("ORGANIZATION_MANAGEMENT_DENIED", 403, "Organization management access denied.");
+  }
+  return membership;
+}
+
 export async function getAdminDashboardData(userId: string) {
   const membership = await prisma.organizationMembership.findFirst({
     where: { userId },
+    orderBy: { createdAt: "asc" },
     include: {
       organization: {
         include: {
@@ -64,7 +99,7 @@ export async function getAdminDashboardData(userId: string) {
       },
       photos: {
         orderBy: { createdAt: "desc" },
-        take: 8,
+        take: 7,
         include: {
           guest: { select: { name: true } },
           mission: { select: { title: true } },
@@ -121,6 +156,100 @@ export async function getAdminDashboardData(userId: string) {
   };
 }
 
+export async function getAdminWeddingGallery(input: {
+  userId: string;
+  weddingId: string;
+  page?: number;
+  pageSize?: number;
+  guestId?: string;
+  missionId?: string;
+}) {
+  const membership = await prisma.organizationMembership.findFirst({
+    where: { userId: input.userId },
+    orderBy: { createdAt: "asc" },
+    select: { organizationId: true },
+  });
+
+  if (!membership) {
+    throw new DomainError("ORGANIZATION_ACCESS_DENIED", 403, "Acesso negado.");
+  }
+
+  const wedding = await prisma.wedding.findFirst({
+    where: { id: input.weddingId, organizationId: membership.organizationId },
+    select: { id: true, name: true, brideName: true, groomName: true },
+  });
+
+  if (!wedding) {
+    throw new DomainError("WEDDING_NOT_FOUND", 404, "Casamento nÃ£o encontrado nesta organizaÃ§Ã£o.");
+  }
+
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 24;
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 48) {
+    throw new DomainError("INVALID_GALLERY_PAGINATION", 400, "PaginaÃ§Ã£o invÃ¡lida.");
+  }
+
+  const guestId = input.guestId?.trim() || undefined;
+  const missionId = input.missionId?.trim() || undefined;
+  const photoWhere = {
+    organizationId: membership.organizationId,
+    weddingId: wedding.id,
+    ...(guestId ? { guestId } : {}),
+    ...(missionId ? { missionId } : {}),
+  };
+
+  const [total, photos, guests, missions] = await Promise.all([
+    prisma.photo.count({ where: photoWhere }),
+    prisma.photo.findMany({
+      where: photoWhere,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        guestId: true,
+        missionId: true,
+        contentType: true,
+        createdAt: true,
+        guest: { select: { name: true } },
+        mission: { select: { title: true } },
+      },
+    }),
+    prisma.guest.findMany({
+      where: { organizationId: membership.organizationId, weddingId: wedding.id },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.mission.findMany({
+      where: { organizationId: membership.organizationId, weddingId: wedding.id },
+      orderBy: [{ displayOrder: "asc" }, { title: "asc" }],
+      select: { id: true, title: true },
+    }),
+  ]);
+
+  const formattedPhotos: AdminGalleryPhoto[] = photos.map((photo) => ({
+    id: photo.id,
+    guestId: photo.guestId,
+    guestName: photo.guest.name,
+    missionId: photo.missionId,
+    missionTitle: photo.mission.title,
+    contentType: photo.contentType,
+    createdAt: photo.createdAt,
+  }));
+
+  return {
+    wedding,
+    photos: formattedPhotos,
+    filters: { guests, missions },
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    },
+  };
+}
+
 export async function createAdminWedding(input: {
   userId: string;
   name?: string;
@@ -130,10 +259,14 @@ export async function createAdminWedding(input: {
 }) {
   const membership = await prisma.organizationMembership.findFirst({
     where: { userId: input.userId },
+    orderBy: { createdAt: "asc" },
   });
 
   if (!membership) {
     throw new DomainError("ORGANIZATION_ACCESS_DENIED", 403, "Você não possui uma organização vinculada.");
+  }
+  if (membership.role === OrganizationRole.MEMBER) {
+    throw new DomainError("ORGANIZATION_MANAGEMENT_DENIED", 403, "Você não pode administrar esta organização.");
   }
 
   const brideName = input.brideName.trim();
@@ -180,7 +313,8 @@ export async function createAdminWedding(input: {
       brideName,
       groomName,
       eventDate: parsedEventDate ?? now,
-      status: WeddingStatus.ACTIVE,
+      // O casamento só fica público depois que a ativação consumir um crédito.
+      status: WeddingStatus.DRAFT,
       publicAccessStartsAt: now,
       publicAccessEndsAt: endsAt,
     },
@@ -232,12 +366,29 @@ export async function createAdminWedding(input: {
     ],
   });
 
-  return wedding;
+  // A baixa é feita no backend, em transação serializável, para impedir que
+  // requisições simultâneas gastem o mesmo crédito.
+  try {
+    await activateWeddingWithCredit({
+      organizationId: membership.organizationId,
+      weddingId: wedding.id,
+    });
+  } catch (error) {
+    // Não deixe um rascunho órfão ocupar a lista nem permitir uma ativação
+    // posterior fora do fluxo de criação que falhou.
+    await prisma.wedding.deleteMany({
+      where: { id: wedding.id, organizationId: membership.organizationId, status: WeddingStatus.DRAFT },
+    });
+    throw error;
+  }
+
+  return { ...wedding, status: WeddingStatus.ACTIVE };
 }
 
-export async function getAdminPhotoStream(input: { userId: string; photoId: string }) {
+export async function getAdminPhotoStream(input: { userId: string; photoId: string; storage?: typeof objectStorage }) {
   const membership = await prisma.organizationMembership.findFirst({
     where: { userId: input.userId },
+    orderBy: { createdAt: "asc" },
   });
 
   if (!membership) {
@@ -253,33 +404,65 @@ export async function getAdminPhotoStream(input: { userId: string; photoId: stri
     throw new DomainError("PHOTO_NOT_FOUND", 404, "Foto não encontrada.");
   }
 
-  const stored = await objectStorage.get(photo.storageKey);
+  const stored = await (input.storage ?? objectStorage).get(photo.storageKey);
   return {
     body: stored.body,
     contentType: photo.contentType,
   };
 }
 
-export async function deleteAdminWedding(input: { userId: string; weddingId: string }) {
+async function findAdminOrganization(userId: string) {
+  return (await findAdminMembership(userId, { manage: true })).organizationId;
+}
+
+export async function setAdminWeddingPublicAccess(input: {
+  userId: string;
+  weddingId: string;
+  revoked: boolean;
+}) {
+  const organizationId = await findAdminOrganization(input.userId);
+  const operation = input.revoked ? revokeWeddingPublicAccess : restoreWeddingPublicAccess;
+  return operation({ organizationId, weddingId: input.weddingId });
+}
+
+export async function deleteAdminWedding(input: { userId: string; weddingId: string; password: unknown }) {
+  await confirmAdminPassword({ userId: input.userId, password: input.password });
+
   const membership = await prisma.organizationMembership.findFirst({
     where: { userId: input.userId },
+    orderBy: { createdAt: "asc" },
   });
 
   if (!membership) {
     throw new DomainError("ORGANIZATION_ACCESS_DENIED", 403, "Você não possui acesso a esta organização.");
   }
+  if (membership.role === OrganizationRole.MEMBER) {
+    throw new DomainError("ORGANIZATION_MANAGEMENT_DENIED", 403, "Você não pode administrar esta organização.");
+  }
 
   const wedding = await prisma.wedding.findFirst({
     where: { id: input.weddingId, organizationId: membership.organizationId },
+    select: {
+      id: true,
+      photos: { select: { storageKey: true } },
+    },
   });
 
   if (!wedding) {
     throw new DomainError("WEDDING_NOT_FOUND", 404, "Casamento não encontrado nesta organização.");
   }
 
-  await prisma.wedding.delete({
-    where: { id: wedding.id },
+  await prisma.$transaction(async (transaction) => {
+    // O lançamento de consumo é imutável, mas sua referência não pode apontar
+    // para um casamento apagado. Mantemos o histórico financeiro na organização.
+    await transaction.creditLedgerEntry.updateMany({
+      where: { organizationId: membership.organizationId, weddingId: wedding.id },
+      data: { weddingId: null },
+    });
+    await transaction.wedding.delete({ where: { id: wedding.id } });
   });
+
+  await Promise.all(wedding.photos.map((photo) => objectStorage.delete(photo.storageKey).catch(() => undefined)));
 
   return { id: wedding.id, deleted: true };
 }

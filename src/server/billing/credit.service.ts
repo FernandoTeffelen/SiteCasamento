@@ -7,6 +7,7 @@ import {
 } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { DomainError } from "@/server/domain/error";
+import { reconcileManualAccessPlansForOrganizations } from "@/server/billing/manual-access-plan.service";
 
 type Transaction = Prisma.TransactionClient;
 
@@ -274,6 +275,9 @@ export async function completeOneTimeCreditPurchase(input: { organizationId: str
 
 /** Consome exatamente um crédito ao publicar o casamento, em transação serializável. */
 export async function activateWeddingWithCredit(input: { organizationId: string; weddingId: string }) {
+  // A liberaÃ§Ã£o Ã© idempotente e garante que um ciclo vencido fique disponÃ­vel
+  // mesmo se o cliente nÃ£o tiver aberto o painel naquele dia.
+  await reconcileManualAccessPlansForOrganizations([input.organizationId]);
   return withTransactionRetry(() => prisma.$transaction(async (transaction) => {
     const wedding = await transaction.wedding.findFirst({
       where: { id: input.weddingId, organizationId: input.organizationId },

@@ -1,6 +1,7 @@
 import { getGuestScore } from "@/server/game/game.service";
 import { updateGuestProfile } from "@/server/guests/guest.service";
-import { getGuestTokenFromRequest, jsonError } from "@/server/http/api-response";
+import { assertContentLengthWithinLimit, getGuestTokenFromRequest, jsonError } from "@/server/http/api-response";
+import { assertRateLimit } from "@/server/http/rate-limit";
 
 export async function GET(request: Request, { params }: { params: Promise<{ identifier: string }> }) {
   try {
@@ -14,7 +15,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ iden
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ identifier: string }> }) {
   try {
-    const [{ identifier }, formData] = await Promise.all([params, request.formData()]);
+    const { identifier } = await params;
+    assertContentLengthWithinLimit(request, 6 * 1024 * 1024);
+    const formData = await request.formData();
+    const guestToken = formData.get("guestToken");
+    assertRateLimit({ namespace: "guest-profile-update", key: `${identifier}:${typeof guestToken === "string" ? guestToken : "missing"}`, limit: 20, windowMs: 60_000 });
     const rawAvatar = formData.get("avatar");
     if (rawAvatar !== null && typeof rawAvatar === "string") {
       return Response.json(
@@ -24,7 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     const result = await updateGuestProfile({
       eventIdentifier: identifier,
-      guestToken: formData.get("guestToken"),
+      guestToken,
       name: formData.get("name"),
       email: formData.get("email"),
       age: formData.get("age"),

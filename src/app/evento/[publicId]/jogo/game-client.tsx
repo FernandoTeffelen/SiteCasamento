@@ -5,7 +5,7 @@ import { ChangeEvent, useEffect, useRef, useState, type CSSProperties } from "re
 import { useRouter } from "next/navigation";
 import type { EventView } from "@/features/event/types";
 import { GuestProfileButton, type GuestProfile } from "@/features/guest/guest-profile";
-import { getLocalGuestName, getLocalGuestToken, saveLocalGuest } from "@/lib/guest/local-guest";
+import { clearActiveLocalGuest, getLocalGuestName, getLocalGuestToken, saveLocalGuest } from "@/lib/guest/local-guest";
 import { listQueuedPhotos, queuePhoto } from "@/lib/offline/photo-queue";
 import { uploadPendingPhotos, uploadQueuedPhoto, type UploadAttemptResult } from "@/lib/offline/upload-queue";
 import { visualConfigToCssVariables } from "@/lib/templates/wedding-visual-config";
@@ -264,6 +264,10 @@ export function GameClient({ event }: { event: EventView }) {
               setGuestName(profile.name);
               saveLocalGuest(event.publicId, { name: profile.name, email: profile.email, token: guestToken });
               setNotice("Perfil atualizado.");
+            }}
+            onSignOut={() => {
+              clearActiveLocalGuest(event.publicId);
+              router.replace(event.publicPath);
             }}
           />
         ) : <div className="guest-avatar" aria-label={`Perfil de ${guestName}`}>{Array.from(guestName.trim())[0]?.toLocaleUpperCase("pt-BR") ?? "C"}</div>}

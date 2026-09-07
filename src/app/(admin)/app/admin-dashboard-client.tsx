@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import type { AdminDashboardWedding } from "@/server/admin/admin-weddings.service";
+import { AdminWeddingGallery } from "./admin-wedding-gallery";
 
 type DashboardData = {
   organization: { id: string; name: string; balance: number };
@@ -24,6 +25,10 @@ export function AdminDashboardClient({
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [newlyCreatedWedding, setNewlyCreatedWedding] = useState<AdminDashboardWedding | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [weddingToDelete, setWeddingToDelete] = useState<AdminDashboardWedding | null>(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [accessChangeId, setAccessChangeId] = useState<string | null>(null);
 
   // Form states
   const [brideName, setBrideName] = useState("");
@@ -34,6 +39,7 @@ export function AdminDashboardClient({
 
   // Photo viewer modal
   const [selectedPhoto, setSelectedPhoto] = useState<{ id: string; guestName: string; missionTitle: string } | null>(null);
+  const [galleryWedding, setGalleryWedding] = useState<AdminDashboardWedding | null>(null);
 
   async function fetchLatestData() {
     try {
@@ -98,6 +104,11 @@ export function AdminDashboardClient({
   }
 
   function handleDeleteWedding(wedding: AdminDashboardWedding) {
+    setWeddingToDelete(wedding);
+    setDeletePassword("");
+    setDeleteError(null);
+    return;
+    /*
     const confirmed = window.confirm(
       `Tem certeza que deseja excluir o casamento "${wedding.name}"?\n\nTodos os convidados, fotos e missões deste evento serão removidos permanentemente. Esta ação não pode ser desfeita.`
     );
@@ -116,6 +127,70 @@ export function AdminDashboardClient({
         // Falha silenciosa
       } finally {
         setDeletingId(null);
+      }
+    });
+    */
+  }
+
+  function closeDeleteWeddingModal() {
+    if (deletingId) return;
+    setWeddingToDelete(null);
+    setDeletePassword("");
+    setDeleteError(null);
+  }
+
+  function confirmDeleteWedding(e: React.FormEvent) {
+    e.preventDefault();
+    const wedding = weddingToDelete;
+    if (!wedding) return;
+    if (!deletePassword) {
+      setDeleteError("Informe sua senha para confirmar a exclusão.");
+      return;
+    }
+
+    startTransition(async () => {
+      setDeletingId(wedding.id);
+      setDeleteError(null);
+      try {
+        const res = await fetch(`/api/admin/weddings/${wedding.id}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: deletePassword }),
+        });
+        if (res.ok) {
+          setData((prev) => ({
+            ...prev,
+            weddings: prev.weddings.filter((item) => item.id !== wedding.id),
+          }));
+          closeDeleteWeddingModal();
+          return;
+        }
+        const errorBody = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+        setDeleteError(errorBody?.error?.message ?? "Não foi possível excluir este casamento agora.");
+      } catch {
+        setDeleteError("Não foi possível conectar ao servidor. Tente novamente.");
+      } finally {
+        setDeletingId(null);
+      }
+    });
+  }
+
+  function handleTogglePublicAccess(wedding: AdminDashboardWedding) {
+    const revoked = wedding.publicAccessRevokedAt === null;
+    const action = revoked ? "revogar" : "reativar";
+    if (!window.confirm(`Deseja ${action} o link público de "${wedding.name}"?`)) return;
+
+    startTransition(async () => {
+      setAccessChangeId(wedding.id);
+      try {
+        const res = await fetch(`/api/admin/weddings/${wedding.id}/public-access`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ revoked }),
+        });
+        if (res.ok) await fetchLatestData();
+      } finally {
+        setAccessChangeId(null);
       }
     });
   }
@@ -266,6 +341,7 @@ export function AdminDashboardClient({
               {data.weddings.map((wedding) => {
                 const origin = typeof window !== "undefined" ? window.location.origin : "";
                 const weddingUrl = `${origin}/w/${wedding.publicId}`;
+                const remainingPhotos = Math.max(0, wedding.photoCount - wedding.recentPhotos.length);
 
                 return (
                   <article key={wedding.id} className="wedding-admin-card">
@@ -281,7 +357,17 @@ export function AdminDashboardClient({
                         </p>
                       </div>
                       <div className="wedding-card-header-actions">
-                        <span className="status-badge-active">Ativo</span>
+                        <span className={`status-badge-active ${wedding.publicAccessRevokedAt ? "status-badge-revoked" : ""}`}>
+                          {wedding.publicAccessRevokedAt ? "Link revogado" : "Ativo"}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-toggle-public-access"
+                          onClick={() => handleTogglePublicAccess(wedding)}
+                          disabled={accessChangeId === wedding.id || isPending}
+                        >
+                          {accessChangeId === wedding.id ? "Atualizando..." : wedding.publicAccessRevokedAt ? "Reativar link" : "Revogar link"}
+                        </button>
                         <button
                           type="button"
                           className="btn-delete-wedding"
@@ -320,6 +406,10 @@ export function AdminDashboardClient({
                       <div className="stat-pill"><strong>{wedding.photoCount}</strong> fotos enviadas</div>
                     </div>
 
+                    <button type="button" className="admin-book-button" onClick={() => setGalleryWedding(wedding)}>
+                      Abrir Book / Galeria
+                    </button>
+
                     {/* Feed de Fotos */}
                     <div className="wedding-photos-feed">
                       <div className="feed-heading">
@@ -343,6 +433,17 @@ export function AdminDashboardClient({
                               </div>
                             </div>
                           ))}
+                          {remainingPhotos > 0 && (
+                            <button
+                              type="button"
+                              className="photo-more-card"
+                              onClick={() => setGalleryWedding(wedding)}
+                              aria-label={`Ver mais ${remainingPhotos} fotos de ${wedding.name}`}
+                            >
+                              <strong>+{remainingPhotos}</strong>
+                              <span>ver todas</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -408,6 +509,46 @@ export function AdminDashboardClient({
         </div>
       )}
 
+      {weddingToDelete && (
+        <div className="modal-backdrop" onClick={closeDeleteWeddingModal}>
+          <div className="modal-window delete-wedding-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-wedding-title">
+            <div className="modal-header">
+              <div>
+                <span className="delete-wedding-kicker">Ação permanente</span>
+                <h2 id="delete-wedding-title">Excluir casamento</h2>
+              </div>
+              <button type="button" className="modal-close-btn" onClick={closeDeleteWeddingModal} disabled={deletingId === weddingToDelete.id} aria-label="Fechar">×</button>
+            </div>
+            <form onSubmit={confirmDeleteWedding} className="modal-form delete-wedding-form">
+              <p className="modal-subtitle">
+                Você está prestes a excluir <strong>{weddingToDelete.name}</strong>. Convidados, missões e fotos serão removidos permanentemente.
+              </p>
+              <div className="delete-wedding-warning">Esta ação não pode ser desfeita.</div>
+              {deleteError && <div className="form-error-banner">{deleteError}</div>}
+              <div className="form-group">
+                <label htmlFor="deleteWeddingPassword">Confirme com sua senha</label>
+                <input
+                  id="deleteWeddingPassword"
+                  type="password"
+                  autoComplete="current-password"
+                  value={deletePassword}
+                  onChange={(event) => setDeletePassword(event.target.value)}
+                  placeholder="Digite sua senha"
+                  disabled={deletingId === weddingToDelete.id}
+                  autoFocus
+                />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={closeDeleteWeddingModal} disabled={deletingId === weddingToDelete.id}>Cancelar</button>
+                <button type="submit" className="btn-confirm-delete" disabled={deletingId === weddingToDelete.id}>
+                  {deletingId === weddingToDelete.id ? "Excluindo..." : "Excluir permanentemente"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Visualizar Foto */}
       {selectedPhoto && (
         <div className="modal-backdrop" onClick={() => setSelectedPhoto(null)}>
@@ -424,6 +565,10 @@ export function AdminDashboardClient({
             </div>
           </div>
         </div>
+      )}
+
+      {galleryWedding && (
+        <AdminWeddingGallery wedding={galleryWedding} onClose={() => setGalleryWedding(null)} />
       )}
     </div>
   );

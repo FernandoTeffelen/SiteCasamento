@@ -26,6 +26,23 @@ enum PlatformRole {
   PLATFORM_ADMIN
 }
 
+enum CustomerType {
+  CEREMONIALIST
+  COUPLE
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ManualAccessPlanStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  EXPIRED
+  CANCELED
+}
+
 enum WeddingTemplateTier {
   FREE
   PREMIUM
@@ -143,6 +160,7 @@ model Organization {
   creditBalance  OrganizationCreditBalance?
   creditEntries  CreditLedgerEntry[]
   subscriptions  OrganizationSubscription[]
+  manualAccessPlans ManualAccessPlan[]
   purchases      OneTimePurchase[]
   entitlements   OrganizationEntitlement[]
 }
@@ -157,12 +175,18 @@ model User {
   passwordHash      String?
   passwordUpdatedAt DateTime?
   platformRole      PlatformRole @default(USER)
+  customerType      CustomerType @default(CEREMONIALIST)
+  accountStatus     AccountStatus @default(ACTIVE)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
   memberships     OrganizationMembership[]
   moderatedPhotos Photo[]                  @relation("PhotoModeratedBy")
   adminSessions   AdminSession[]
+  manualAccessPlans        ManualAccessPlan[] @relation("ManualAccessPlanCustomer")
+  createdManualAccessPlans ManualAccessPlan[] @relation("ManualAccessPlanCreatedBy")
+
+  @@index([platformRole, accountStatus, createdAt(sort: Desc)])
 }
 
 /// Sessões opacas do painel. O navegador recebe somente o token aleatório; o
@@ -202,7 +226,8 @@ model Wedding {
   organizationId        String
   templateId            String?
   /// Token opaco usado no QR Code; nunca use o id interno no cliente.
-  publicId              String        @unique @default(cuid())
+  /// Token opaco obrigatorio; deve ser criado por generateSecureWeddingToken().
+  publicId              String        @unique
   /// Endereço legível opcional. Eventos privados podem usar somente o token público.
   slug                  String?       @unique
   name                  String
@@ -230,6 +255,7 @@ model Wedding {
 
   @@unique([id, organizationId])
   @@index([organizationId, status, eventDate])
+  @@index([organizationId, createdAt(sort: Desc)])
   @@index([status, publicAccessStartsAt, publicAccessEndsAt])
   @@index([templateId])
 }
@@ -274,6 +300,33 @@ model SubscriptionPlan {
 
   @@unique([tier, period])
   @@index([active, tier])
+}
+
+/// Concessão manual após confirmação fora do gateway (por exemplo, PIX).
+/// Cada registro preserva a configuração original e libera créditos por ciclo mensal.
+model ManualAccessPlan {
+  id                String                 @id @default(cuid())
+  organizationId    String
+  customerId        String
+  createdByUserId   String?
+  status            ManualAccessPlanStatus @default(PENDING_PAYMENT)
+  durationMonths    Int
+  creditsPerMonth   Int
+  startDate         DateTime
+  endDate           DateTime
+  lastCreditReleasedAt DateTime?
+  nextCreditReleaseAt  DateTime?
+  canceledAt        DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     User         @relation("ManualAccessPlanCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("ManualAccessPlanCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, endDate])
+  @@index([organizationId, status, nextCreditReleaseAt])
+  @@index([customerId, createdAt(sort: Desc)])
 }
 
 /// Assinatura contratada por uma cerimonialista. Valores de crédito e período
@@ -512,6 +565,8 @@ model Submission {
   @@index([organizationId, weddingId, clientUploadId])
   @@index([organizationId, weddingId, status])
   @@index([organizationId, guestId, createdAt])
+  @@index([organizationId, weddingId, guestId, createdAt])
+  @@index([organizationId, weddingId, guestId, missionId, status])
   @@index([organizationId, missionId, status])
 }
 
@@ -544,7 +599,7 @@ model Photo {
   @@unique([submissionId, weddingId, organizationId, guestId, missionId])
   @@index([organizationId, weddingId, moderationStatus, createdAt])
   @@index([organizationId, weddingId, guestId, missionId])
-  @@index([organizationId, weddingId, createdAt])
+  @@index([organizationId, weddingId, createdAt(sort: Desc), id(sort: Desc)])
 }
 
 model ScoreEntry {

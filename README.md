@@ -1,95 +1,122 @@
 # SiteCasamento
 
-Plataforma mobile-first de gamificação fotográfica para casamentos. Convidados participam de missões pelo celular via QR Code ou link, sem instalar nada. O mesmo projeto Next.js reúne o site comercial público, o jogo privado de cada casamento e o painel administrativo das cerimonialistas.
+Plataforma mobile-first para convidados participarem de missões fotográficas em casamentos por QR Code ou link, sem instalar aplicativo. O projeto reúne o site comercial, a experiência privada de cada casamento, o painel da cerimonialista e a área interna do proprietário da plataforma.
 
-## Arquitetura dos ambientes
+## Funcionalidades atuais
 
-| Área | Rotas principais | Acesso |
+- Links privados por casamento usando token opaco e não enumerável (`Wedding.publicId`), nunca o ID interno do banco.
+- Janela de acesso público com expiração e revogação manual, sem apagar os dados do casamento.
+- Cadastro de convidados isolado por casamento, com possibilidade de trocar de convidado no mesmo celular.
+- Missões, envio de fotos, pontuação e ranking calculados e validados no servidor.
+- Fila local de fotos com estados de envio e armazenamento por meio da abstração `ObjectStorage`.
+- Painel da cerimonialista com casamentos, links, convidados, ranking, fotos recentes e Book/Galeria.
+- Galeria administrativa paginada, com filtros por convidado e missão e visualização ampliada.
+- Planos com créditos mensais, créditos avulsos e histórico de movimentações.
+- Liberação manual de acesso pelo proprietário após pagamento via PIX.
+- Área exclusiva do proprietário em `/gestao-interna`, protegida no backend por usuário com `PLATFORM_ADMIN`.
+- Exclusão de casamento protegida pela senha da cerimonialista e com confirmação em modal.
+
+## Rotas principais
+
+| Área | Rotas | Acesso |
 | --- | --- | --- |
-| Comercial | `/`, `/planos` | Público |
-| Autenticação | `/app/login`, `/app/cadastro` | Público |
-| Casamento | `/w/{token}`, `/w/{token}/jogo`, `/w/{token}/fotos` | Token público não enumerável |
-| Administrativo | `/app`, `/app/configuracoes` | Cerimonialista autenticada + plano ativo |
+| Site comercial | `/`, `/planos` | Público |
+| Conta do cliente | `/app/login`, `/app/cadastro`, `/app`, `/app/configuracoes` | Cerimonialista ou casal |
+| Casamento | `/w/{token}`, `/w/{token}/jogo`, `/w/{token}/fotos` | Convidado com token válido |
+| Gestão do proprietário | `/gestao-interna/login`, `/gestao-interna`, `/gestao-interna/clientes` | Somente administrador da plataforma |
 
-As rotas `/api` são Route Handlers do Next.js; não existe backend separado. O identificador público do casamento é um token opaco (`Wedding.publicId`), nunca o ID interno. Links antigos em `/evento/{token}` redirecionam para `/w/{token}`.
+As rotas `/api` são Route Handlers do Next.js. A área do proprietário não é exibida no painel comum e todas as operações administrativas são verificadas no backend.
 
-## Fluxo de acesso da cerimonialista
+## Stack e arquitetura
 
-1. **Cadastro** em `/app/cadastro`: cria conta, organização e faz login automaticamente.
-2. **Sem plano ativo**: redireciona para `/planos` para escolher uma assinatura.
-3. **Com plano ativo**: redireciona para `/app` (painel administrativo).
-4. O usuário demo `cerimonial@demo.test` é tratado como pagante vitalício para testes locais.
+- Next.js 16 com App Router, React e TypeScript estrito.
+- PostgreSQL 16 com Prisma como única camada de acesso ao banco.
+- `src/features` para domínios da aplicação.
+- `src/server` para autenticação, autorização, regras de negócio e acesso ao banco.
+- `src/lib` para contratos e utilitários compartilhados.
+- `ObjectStorage` para fotos: disco local em desenvolvimento e S3-compatible/R2 em produção.
+- Testes de integração com `tsx --test`.
 
-## Stack
+## Configuração local
 
-- Next.js 16 (App Router), React e TypeScript estrito
-- PostgreSQL com Prisma como única camada de acesso ao banco
-- `ObjectStorage` para fotos (local em desenvolvimento, S3-compatible em produção)
-- `tsx --test` para testes de integração
+Pré-requisitos: Node.js, npm e Docker Desktop (para o PostgreSQL local).
 
-## Banco de dados e migrations
+No PowerShell:
 
-O banco é PostgreSQL. O modelo está em [`prisma/schema.prisma`](prisma/schema.prisma) e as migrações em [`prisma/migrations`](prisma/migrations).
-
-### Rodar localmente
-
-```bash
+```powershell
+Copy-Item .env.example .env
 npm install
-# configure DATABASE_URL em .env (veja .env.example)
+npm run db:up
 npm run db:deploy
 npm run db:generate
-npm run db:seed       # somente desenvolvimento/demo
+npm run db:seed
 npm run db:check
 npm run dev
 ```
 
-Nunca faça reset do banco de produção; use `npm run db:deploy`, que aplica migrations pendentes sem apagar dados.
+Abra `http://localhost:3000`. O PostgreSQL local usa a porta `5433`, conforme o `compose.yaml`.
 
-## Deploy (frontend e backend no mesmo link)
+Para parar somente o banco local:
 
-Hospede em Vercel (ou similar) com um PostgreSQL gerenciado (Neon, Supabase, Railway, etc.).
+```powershell
+npm run db:stop
+```
 
-1. Importe o repositório no host Next.js.
-2. Crie um PostgreSQL gerenciado e configure `DATABASE_URL`.
-3. Configure as variáveis de ambiente:
+Nunca use reset do banco em um ambiente com dados importantes. Use migrations com `npm run db:deploy`.
 
-   ```text
-   DATABASE_URL=postgresql://...
-   STORAGE_DRIVER=s3-compatible
-   S3_ENDPOINT=https://...
-   S3_REGION=...
-   S3_BUCKET=...
-   S3_ACCESS_KEY_ID=...
-   S3_SECRET_ACCESS_KEY=...
-   MAX_UPLOAD_BYTES=15728640
-   ```
+## Contas de demonstração
 
-4. Execute `npm run db:deploy` uma vez no banco de produção.
-5. Configure o build como `npm run build`.
+O seed cria a conta demo da cerimonialista:
 
-O armazenamento local (`STORAGE_DRIVER=local`) não é adequado para ambientes serverless.
+```text
+E-mail: cerimonial@demo.test
+Senha:  cerimonial1234
+Painel: http://localhost:3000/app/login
+```
 
-## Links e ciclo de vida do casamento
+A conta demo possui créditos amplos apenas fora de produção. Para criar o administrador do proprietário, preencha no `.env`:
 
-Um link público tem o formato `https://seu-dominio/w/{publicId}`. Ele funciona apenas enquanto o casamento está ativo e dentro da janela `publicAccessStartsAt`/`publicAccessEndsAt`. Após expirar, convidados perdem acesso, mas os dados permanecem no banco para o painel administrativo. O `publicId` é gerado de forma opaca e compartilhado via QR Code.
+```text
+PLATFORM_ADMIN_EMAIL=dono@demo.test
+PLATFORM_ADMIN_PASSWORD=uma-senha-com-no-minimo-6-caracteres
+PLATFORM_ADMIN_NAME=Dono do SiteCasamento
+```
 
-## Painel administrativo
+Depois execute:
 
-Acesso em `/app`. Requer conta cadastrada e plano ativo (ou ser o usuário demo). A cerimonialista pode:
+```powershell
+npm run platform:admin
+```
 
-- Criar casamentos (gera link/token seguro + missões padrão);
-- Visualizar fotos enviadas pelos convidados em tempo real;
-- Ver ranking de convidados por casamento;
-- Excluir casamentos;
-- Gerenciar perfil e senha em `/app/configuracoes`.
+O login do proprietário fica em `http://localhost:3000/gestao-interna/login`. O e-mail e a senha reais permanecem somente no `.env`; não os coloque no README, em commits ou em screenshots.
 
-## Créditos e pagamentos
+## Fluxos de teste
 
-A estrutura de planos, créditos e assinaturas existe no banco e nos serviços. Gateway de pagamento e cobrança real ainda não estão conectados a um provedor.
+1. Cadastre uma conta em `/app/cadastro` escolhendo casal ou cerimonialista.
+2. Entre no painel do proprietário e abra `/gestao-interna/clientes`.
+3. Abra os detalhes do novo cliente e libere um crédito avulso ou um plano mensal.
+4. Faça login novamente como cliente em `/app/login` e confirme os créditos em `/app/configuracoes`.
+5. Crie um casamento. A ativação consome um crédito e o link aparece no painel.
+6. Abra o link `/w/{token}` em outro navegador ou dispositivo, registre convidados e envie fotos.
+7. No painel da cerimonialista, abra o Book/Galeria para paginar e filtrar as fotos.
 
-## Verificação antes de publicar
+O link público deixa de funcionar ao expirar ou ser revogado, mas o casamento, convidados e fotos continuam disponíveis para a cerimonialista autorizada.
 
-```bash
+## Variáveis de ambiente
+
+As variáveis obrigatórias e seus exemplos estão em `.env.example`:
+
+- `DATABASE_URL`: conexão PostgreSQL.
+- `STORAGE_DRIVER` e `LOCAL_STORAGE_PATH`: armazenamento local de desenvolvimento.
+- `MAX_UPLOAD_BYTES`: limite de upload.
+- `PLATFORM_ADMIN_EMAIL`, `PLATFORM_ADMIN_PASSWORD` e `PLATFORM_ADMIN_NAME`: provisionamento do proprietário.
+- `S3_*`: armazenamento compatível com S3/R2 em produção.
+
+O armazenamento local não é indicado para ambientes serverless. Em produção, use PostgreSQL gerenciado e Object Storage privado.
+
+## Comandos de qualidade
+
+```powershell
 npm test
 npm run typecheck
 npm run lint
@@ -97,13 +124,22 @@ npm run build
 npm run db:check
 ```
 
+Os testes cobrem autenticação, isolamento entre organizações e casamentos, tokens inválidos/expirados/revogados, créditos, uploads, galeria e exclusão protegida por senha.
+
 ## Estrutura resumida
 
 ```text
-src/app/              páginas, layouts e APIs Next.js
+src/app/              páginas, layouts e APIs do Next.js
 src/features/         domínios de convidados, jogo e casamento
 src/server/           Prisma, autenticação, billing e regras de negócio
 src/lib/              contratos e utilitários compartilhados
 prisma/schema.prisma  modelo PostgreSQL
 prisma/migrations/    histórico do schema
+tests/                testes de integração
 ```
+
+## Pendências conhecidas
+
+- O gateway de pagamento ainda não está conectado; a liberação via PIX é manual.
+- A geração de álbum físico e edição avançada da galeria ainda não fazem parte do produto.
+- O serviço de tarefas para liberar créditos mensais deve ser executado por um scheduler/worker em produção.

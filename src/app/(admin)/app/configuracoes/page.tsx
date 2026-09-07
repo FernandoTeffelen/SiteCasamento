@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireAdminSession } from "@/server/auth/admin-auth.service";
+import { getAdminSubscriptionSummary, requireAdminSession } from "@/server/auth/admin-auth.service";
 import { isDomainError } from "@/server/domain/error";
 import { AdminSettingsClient } from "./admin-settings-client";
 
@@ -16,7 +16,7 @@ export default async function AdminSettingsPage() {
     throw error;
   }
 
-  return (
-    <AdminSettingsClient user={{ name: user.name ?? "", email: user.email }} />
-  );
+  const subscription = await getAdminSubscriptionSummary(user.id);
+
+  return <AdminSettingsClient user={{ name: user.name ?? "", email: user.email }} subscription={subscription} />;
 }

@@ -3,8 +3,24 @@
 import { useState, useTransition } from "react";
 
 type UserInfo = { name: string; email: string };
+type SubscriptionSummary = {
+  creditsAvailable: number;
+  plan: {
+    organizationName: string;
+    durationMonths: number;
+    creditsPerMonth: number;
+    startDate: string;
+    endDate: string;
+    lastCreditReleasedAt: string | null;
+    nextCreditReleaseAt: string | null;
+  } | null;
+};
 
-export function AdminSettingsClient({ user }: { user: UserInfo }) {
+function formatDate(date: string | null) {
+  return date ? new Date(date).toLocaleDateString("pt-BR") : "—";
+}
+
+export function AdminSettingsClient({ user, subscription }: { user: UserInfo; subscription: SubscriptionSummary }) {
   const [tab, setTab] = useState<"profile" | "password" | "subscription">("profile");
   const [isPending, startTransition] = useTransition();
   const [success, setSuccess] = useState<string | null>(null);
@@ -44,7 +60,7 @@ export function AdminSettingsClient({ user }: { user: UserInfo }) {
   function handlePasswordSave(e: React.FormEvent) {
     e.preventDefault();
     resetFeedback();
-    if (newPassword.length < 12) { setError("A nova senha deve ter pelo menos 12 caracteres."); return; }
+    if (newPassword.length < 6) { setError("A nova senha deve ter pelo menos 6 caracteres."); return; }
     if (newPassword !== confirmPassword) { setError("As senhas não coincidem."); return; }
     startTransition(async () => {
       try {
@@ -146,7 +162,7 @@ export function AdminSettingsClient({ user }: { user: UserInfo }) {
               />
             </div>
             <div className="form-group">
-              <label htmlFor="s-new">Nova Senha <span className="label-hint">(mínimo 12 caracteres)</span></label>
+              <label htmlFor="s-new">Nova Senha <span className="label-hint">(mínimo 6 caracteres)</span></label>
               <input
                 id="s-new"
                 type="password"
@@ -181,11 +197,21 @@ export function AdminSettingsClient({ user }: { user: UserInfo }) {
             <div className="subscription-plan-card">
               <div className="plan-icon">💳</div>
               <div>
-                <strong>Plano Atual</strong>
-                <p>Gerenciamento de assinatura e pagamentos estarão disponíveis em breve nesta área.</p>
-                <p className="plan-hint">
-                  Em produção, esta seção exibirá seu plano ativo, data de renovação e opções para upgrade ou cancelamento.
-                </p>
+                <strong>{subscription.plan ? "Acesso liberado" : "Sem acesso ativo"}</strong>
+                {subscription.plan ? (
+                  <>
+                    <p>Seu acesso foi liberado para {subscription.plan.organizationName}.</p>
+                    <dl className="subscription-details">
+                      <div><dt>Período</dt><dd>{formatDate(subscription.plan.startDate)} até {formatDate(subscription.plan.endDate)}</dd></div>
+                      <div><dt>Duração</dt><dd>{subscription.plan.durationMonths} mês(es)</dd></div>
+                      <div><dt>Créditos por mês</dt><dd>{subscription.plan.creditsPerMonth}</dd></div>
+                      <div><dt>Créditos disponíveis</dt><dd>{subscription.creditsAvailable}</dd></div>
+                      <div><dt>Próxima liberação</dt><dd>{formatDate(subscription.plan.nextCreditReleaseAt)}</dd></div>
+                    </dl>
+                  </>
+                ) : (
+                  <p>Esta conta ainda não possui um plano de acesso liberado. Após a confirmação, os dados aparecerão aqui automaticamente.</p>
+                )}
               </div>
             </div>
           </div>

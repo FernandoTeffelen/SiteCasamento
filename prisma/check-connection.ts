@@ -12,6 +12,12 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: data
 
 async function main() {
   await prisma.$queryRaw`SELECT 1`;
+  const weddingCount = await prisma.wedding.count();
+
+  if (process.env.CHECK_DEMO_FIXTURES !== "true") {
+    console.log(`Banco conectado. ${weddingCount} casamento(s) cadastrado(s).`);
+    return;
+  }
 
   const weddings = await prisma.wedding.findMany({
     where: { slug: { in: ["ana-e-joao", "beatriz-e-rafael"] } },

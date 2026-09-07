@@ -59,7 +59,7 @@ function validateClientUploadId(clientUploadId: unknown) {
   return clientUploadId;
 }
 
-function getMaximumUploadBytes() {
+export function getMaximumUploadBytes() {
   const configuredValue = Number(process.env.MAX_UPLOAD_BYTES ?? DEFAULT_MAX_UPLOAD_BYTES);
   return Number.isInteger(configuredValue) && configuredValue > 0 ? configuredValue : DEFAULT_MAX_UPLOAD_BYTES;
 }
@@ -353,8 +353,9 @@ export async function uploadMissionPhoto(input: UploadMissionPhotoInput) {
   const guestToken = validateGuestToken(input.guestToken);
   const missionId = validateMissionId(input.missionId);
   const clientUploadId = validateClientUploadId(input.clientUploadId);
-  const photo = await validatePhotoFile(input.file);
   const { wedding, guest } = await getGuestContext(input.eventIdentifier, guestToken);
+  // Resolve o evento e o convidado antes de ler os bytes completos do arquivo.
+  const photo = await validatePhotoFile(input.file);
   const prepared = await prepareSubmission({
     organizationId: wedding.organizationId,
     weddingId: wedding.id,
@@ -403,6 +404,7 @@ export async function uploadMissionPhoto(input: UploadMissionPhotoInput) {
     };
   } catch (error) {
     await markUploadFailed(prepared.id);
+    await (input.storage ?? objectStorage).delete(storageKey).catch(() => undefined);
     throw error;
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ADMIN_SESSION_COOKIE, checkUserIsPayingOrActive, registerAdminUser } from "@/server/auth/admin-auth.service";
 import { jsonError } from "@/server/http/api-response";
 import { isDomainError } from "@/server/domain/error";
+import { assertRequestRateLimit } from "@/server/http/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -10,23 +11,27 @@ export async function POST(request: Request) {
   const isJson = contentType.includes("application/json");
 
   try {
+    assertRequestRateLimit(request, { namespace: "admin-register", limit: 8, windowMs: 60 * 60_000 });
     let name: unknown;
     let email: unknown;
     let password: unknown;
+    let customerType: unknown;
 
     if (isJson) {
       const body = await request.json();
       name = body.name;
       email = body.email;
       password = body.password;
+      customerType = body.customerType;
     } else {
       const formData = await request.formData();
       name = formData.get("name");
       email = formData.get("email");
       password = formData.get("password");
+      customerType = formData.get("customerType");
     }
 
-    const session = await registerAdminUser({ name, email, password });
+    const session = await registerAdminUser({ name, email, password, customerType });
     const isPaying = await checkUserIsPayingOrActive(session.user.id);
 
     const redirectPath = isPaying ? "/app" : "/planos?notice=new_account";

@@ -27,11 +27,13 @@ export function GuestProfileButton({
   guestToken,
   profile,
   onSaved,
+  onSignOut,
 }: {
   eventIdentifier: string;
   guestToken: string;
   profile: GuestProfile;
   onSaved(profile: GuestProfile): void;
+  onSignOut(): void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState(profile.name);
@@ -243,6 +245,7 @@ export function GuestProfileButton({
                 {isSaving ? "Salvando…" : "Salvar perfil"}
               </button>
               <button className="profile-cancel" type="button" onClick={closeProfile} disabled={isSaving}>Cancelar</button>
+              <button className="profile-sign-out" type="button" onClick={onSignOut} disabled={isSaving}>Sair e trocar convidado</button>
             </form>
           </div>
         </section>

@@ -180,7 +180,7 @@ export async function registerOrIdentifyGuest(
       select: guestSelect,
     });
 
-    if (existingGuest && existingGuest.name.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR")) {
+    if (existingGuest && (!existingGuest.email || !email || existingGuest.email === email)) {
       if (existingGuest.email && email && existingGuest.email !== email) {
         throw new DomainError("GUEST_EMAIL_MISMATCH", 409, "Este aparelho já está vinculado a outro e-mail neste casamento.");
       }
@@ -198,6 +198,14 @@ export async function registerOrIdentifyGuest(
           }
           throw error;
         }
+      }
+      if (existingGuest.name !== name) {
+        const updatedGuest = await prisma.guest.update({
+          where: { id: existingGuest.id },
+          data: { name },
+          select: guestSelect,
+        });
+        return { wedding, guest: toGuestIdentity(updatedGuest), created: false };
       }
       return { wedding, guest: toGuestIdentity(existingGuest), created: false };
     }

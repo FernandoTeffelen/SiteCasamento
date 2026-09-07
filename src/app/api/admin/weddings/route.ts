@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/server/auth/admin-auth.service";
 import { createAdminWedding, getAdminDashboardData } from "@/server/admin/admin-weddings.service";
-import { jsonError } from "@/server/http/api-response";
+import { assertSameOriginRequest, jsonError } from "@/server/http/api-response";
 
 export const runtime = "nodejs";
 
@@ -17,6 +17,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    assertSameOriginRequest(request);
     const user = await requireAdminSession();
     const body = await request.json();
     const wedding = await createAdminWedding({

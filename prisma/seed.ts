@@ -10,7 +10,7 @@ import {
   WeddingTemplateTier,
 } from "../src/generated/prisma/client";
 import { defaultWeddingVisualConfig } from "../src/lib/templates/wedding-visual-config";
-import { setAdminPassword } from "../src/server/auth/admin-auth.service";
+import { DEMO_ADMIN_PASSWORD, DEMO_CREDIT_BALANCE, setAdminPassword } from "../src/server/auth/admin-auth.service";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -22,6 +22,8 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: data
 const samplePublicIds = [
   "ana-e-joao",
   "beatriz-e-rafael",
+  "evt_4a6f3b9c8d1e2f705a6b7c8d9e0f1a2b",
+  "evt_9b2c7d4e1f6a8c305d7e9b2a4c6f8d10",
   "evt_demo_ana_joao_4f2h7k",
   "evt_demo_beatriz_rafael_9m3q6s",
 ];
@@ -35,7 +37,7 @@ async function seedAnaAndJoao(organizationId: string, templateId: string) {
     data: {
       organizationId,
       templateId,
-      publicId: "evt_demo_ana_joao_4f2h7k",
+      publicId: "evt_4a6f3b9c8d1e2f705a6b7c8d9e0f1a2b",
       slug: "ana-e-joao",
       name: "Casamento de Ana & João",
       brideName: "Ana",
@@ -152,7 +154,7 @@ async function seedBeatrizAndRafael(organizationId: string, templateId: string) 
     data: {
       organizationId,
       templateId,
-      publicId: "beatriz-e-rafael",
+      publicId: "evt_9b2c7d4e1f6a8c305d7e9b2a4c6f8d10",
       slug: "beatriz-e-rafael",
       name: "Casamento de Beatriz & Rafael",
       brideName: "Beatriz",
@@ -278,6 +280,11 @@ async function main() {
     create: { publicId: sampleOrganizationPublicId, name: "Cerimonial Demonstração" },
     update: { name: "Cerimonial Demonstração" },
   });
+  await prisma.organizationCreditBalance.upsert({
+    where: { organizationId: organization.id },
+    create: { organizationId: organization.id, balance: DEMO_CREDIT_BALANCE },
+    update: { balance: DEMO_CREDIT_BALANCE },
+  });
 
   const demoUser = await prisma.user.upsert({
     where: { email: "cerimonial@demo.test" },
@@ -306,7 +313,7 @@ async function main() {
       role: "OWNER",
     },
   });
-  await setAdminPassword({ userId: demoUser.id, password: "cerimonial1234" });
+  await setAdminPassword({ userId: demoUser.id, password: DEMO_ADMIN_PASSWORD });
 
   const classicTemplate = await prisma.weddingTemplate.upsert({
     where: { slug: "romance-classico" },
