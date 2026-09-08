@@ -1,0 +1,175 @@
+/* QR Code do acesso privado do casamento */
+.btn-show-qr {
+  min-height: 2.45rem;
+  padding: 0.56rem 0.76rem;
+  border: 1px solid #dbc1ca;
+  border-radius: 0.68rem;
+  background: #fff;
+  color: #6d3345;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-show-qr:hover,
+.btn-show-qr:focus-visible {
+  border-color: #9b536b;
+  background: #fff5f7;
+}
+
+.wedding-qr-backdrop { padding: 1rem; }
+
+.wedding-qr-modal {
+  width: min(100%, 31rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: 1.35rem;
+  border: 1px solid #ecdce1;
+  border-radius: 1.25rem;
+  background: #fffdfb;
+  box-shadow: 0 1.5rem 4rem rgb(55 26 35 / 24%);
+}
+
+.wedding-qr-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.wedding-qr-kicker {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: #9a586d;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wedding-qr-modal h2 {
+  margin: 0;
+  color: #40232d;
+  font-size: clamp(1.28rem, 5vw, 1.62rem);
+}
+
+.wedding-qr-description {
+  margin: 0.7rem 0 1.15rem;
+  color: #6e5961;
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.wedding-qr-code {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.wedding-qr-image-frame {
+  display: grid;
+  min-height: 14rem;
+  place-items: center;
+  padding: 0.8rem;
+  border: 1px solid #f0e2e5;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #fff6f7, #fffdfb 56%, #f8edf0);
+}
+
+.wedding-qr-image {
+  display: block;
+  width: min(100%, 15rem);
+  height: auto;
+  border-radius: 0.45rem;
+  image-rendering: pixelated;
+}
+
+.wedding-qr-loading,
+.wedding-qr-error {
+  margin: 0;
+  color: #765d66;
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+.wedding-qr-link-label {
+  color: #644d56;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.wedding-qr-link {
+  width: 100%;
+  min-height: 2.7rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #dfcbd1;
+  border-radius: 0.7rem;
+  background: #fff;
+  color: #5c3d48;
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.wedding-qr-actions,
+.wedding-qr-modal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.wedding-qr-actions > *,
+.wedding-qr-modal-footer > * { flex: 1 1 10rem; }
+
+.wedding-qr-copy-button,
+.wedding-qr-download-link {
+  display: inline-flex;
+  min-height: 2.65rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #9b536b;
+  border-radius: 0.72rem;
+  background: #fff;
+  color: #7f3c53;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 850;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.wedding-qr-copy-button:hover,
+.wedding-qr-copy-button:focus-visible,
+.wedding-qr-download-link:hover,
+.wedding-qr-download-link:focus-visible {
+  background: #fff1f4;
+}
+
+.wedding-qr-modal-footer {
+  margin-top: 1.2rem;
+}
+
+.wedding-qr-modal-footer .admin-btn-open,
+.wedding-qr-modal-footer .btn-cancel {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+@media (max-width: 47.99rem) {
+  .link-input-row .btn-show-qr {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 34rem) {
+  .wedding-qr-backdrop { padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem max(0.75rem, env(safe-area-inset-bottom)); }
+  .wedding-qr-modal { padding: 1.1rem; border-radius: 1rem; }
+  .wedding-qr-image-frame { min-height: 12rem; }
+  .wedding-qr-actions > *,
+  .wedding-qr-modal-footer > * { flex-basis: 100%; }
+  .btn-show-qr { flex: 1 1 auto; }
+}

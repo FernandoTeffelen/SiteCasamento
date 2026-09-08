@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   description: "Missões do jogo de fotos do casamento.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default async function WeddingGamePage({ params }: { params: Promise<{ token: string }> }) {
   let event: EventView;
   const { token } = await params;

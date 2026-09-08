@@ -47,7 +47,7 @@ export async function POST(
       clientUploadId: getTextValue(formData, "uploadId"),
       file: photo,
     });
-    return Response.json(result, { status: 201 });
+    return Response.json(result, { status: 201, headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return jsonError(error);
   }
@@ -67,7 +67,7 @@ export async function DELETE(
       missionId,
       clientUploadId: uploadId,
     });
-    return Response.json(result);
+    return Response.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return jsonError(error);
   }

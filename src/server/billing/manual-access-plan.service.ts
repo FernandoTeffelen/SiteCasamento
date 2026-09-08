@@ -1,4 +1,5 @@
 import {
+  AdminAuditAction,
   CreditLedgerEntryType,
   ManualAccessPlanStatus,
   Prisma,
@@ -203,7 +204,7 @@ export async function createManualAccessPlan(input: {
         });
         if (adjustmentMode === "EXTEND") {
           const duration = current.durationMonths + durationMonths;
-          return transaction.manualAccessPlan.update({
+          const updated = await transaction.manualAccessPlan.update({
             where: { id: current.id },
             data: {
               durationMonths: duration,
@@ -211,6 +212,16 @@ export async function createManualAccessPlan(input: {
               nextCreditReleaseAt: current.nextCreditReleaseAt ?? addMonths(current.startDate, current.durationMonths),
             },
           });
+          await transaction.adminAuditLog.create({
+            data: {
+              action: AdminAuditAction.MANUAL_PLAN_UPDATED,
+              actorUserId: input.createdByUserId,
+              customerId: input.customerId,
+              organizationId: input.organizationId,
+              metadata: { planId: current.id, adjustmentMode, addedMonths: durationMonths },
+            },
+          });
+          return updated;
         }
 
         const nextCredits = current.creditsPerMonth + creditsPerMonth;
@@ -241,6 +252,15 @@ export async function createManualAccessPlan(input: {
             },
           });
         }
+        await transaction.adminAuditLog.create({
+          data: {
+            action: AdminAuditAction.MANUAL_PLAN_UPDATED,
+            actorUserId: input.createdByUserId,
+            customerId: input.customerId,
+            organizationId: input.organizationId,
+            metadata: { planId: current.id, adjustmentMode, addedCreditsPerMonth: creditsPerMonth, newCreditsPerMonth: nextCredits },
+          },
+        });
         return updated;
       }
     }
@@ -261,11 +281,28 @@ export async function createManualAccessPlan(input: {
     if (status === ManualAccessPlanStatus.ACTIVE) {
       await reconcilePlansInTransaction(transaction, input.organizationId, new Date());
     }
+    await transaction.adminAuditLog.create({
+      data: {
+        action: AdminAuditAction.MANUAL_PLAN_CREATED,
+        actorUserId: input.createdByUserId,
+        customerId: input.customerId,
+        organizationId: input.organizationId,
+        metadata: {
+          planId: plan.id,
+          status,
+          durationMonths,
+          creditsPerMonth,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        },
+      },
+    });
     return plan;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }
 
 export async function updateManualAccessPlanStatus(input: {
+  actorUserId: string;
   customerId: string;
   planId: string;
   status: unknown;
@@ -303,6 +340,15 @@ export async function updateManualAccessPlanStatus(input: {
     if (status === ManualAccessPlanStatus.ACTIVE) {
       await reconcilePlansInTransaction(transaction, plan.organizationId, new Date());
     }
+    await transaction.adminAuditLog.create({
+      data: {
+        action: AdminAuditAction.MANUAL_PLAN_STATUS_CHANGED,
+        actorUserId: input.actorUserId,
+        customerId: input.customerId,
+        organizationId: plan.organizationId,
+        metadata: { planId: plan.id, previousStatus: plan.status, status },
+      },
+    });
     return updated;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }

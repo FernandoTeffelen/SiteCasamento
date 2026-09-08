@@ -1,0 +1,505 @@
+/* ====================================================================
+   CONFIGURADOR DE PLANOS
+   ==================================================================== */
+
+.plan-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 0 auto 2rem;
+  color: #aa9291;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.plan-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.plan-step:not(:last-child)::after {
+  display: block;
+  width: 1.25rem;
+  height: 1px;
+  margin-left: 0.2rem;
+  background: #eadbd8;
+  content: "";
+}
+
+.plan-step b {
+  display: grid;
+  width: 1.6rem;
+  height: 1.6rem;
+  place-items: center;
+  border: 1px solid #e8d7d3;
+  border-radius: 50%;
+  background: #fff;
+  color: #a99190;
+  font-size: 0.7rem;
+}
+
+.plan-step.current,
+.plan-step.completed {
+  color: #a95954;
+}
+
+.plan-step.current b,
+.plan-step.completed b {
+  border-color: #d9aaa5;
+  background: #f8e8e5;
+  color: #a95954;
+}
+
+.plan-builder {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+  border: 1px solid #eedcd8;
+  border-radius: 1.75rem;
+  background: #fff;
+  box-shadow: 0 16px 45px rgba(85, 42, 46, 0.07);
+}
+
+.plan-builder-intro {
+  max-width: 38rem;
+  margin: 0 auto 2rem;
+  text-align: center;
+}
+
+.plan-builder-intro h2 {
+  margin: 0.45rem 0 0.65rem;
+  color: #2d181b;
+  font-size: clamp(1.65rem, 4vw, 2.15rem);
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.plan-builder-intro p {
+  margin: 0;
+  color: #6d4e52;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.plan-builder-section {
+  padding-top: 1.5rem;
+  border-top: 1px solid #f1e3e0;
+}
+
+.credits-builder-section {
+  margin-top: 1.6rem;
+}
+
+.builder-section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.builder-number {
+  display: grid;
+  width: 1.85rem;
+  height: 1.85rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.65rem;
+  background: #f8e8e5;
+  color: #a95954;
+  font-size: 0.85rem;
+  font-weight: 900;
+}
+
+.builder-section-heading h3 {
+  margin: 0;
+  color: #3c2528;
+  font-size: 1.05rem;
+  letter-spacing: -0.025em;
+}
+
+.builder-section-heading p {
+  margin: 0.25rem 0 0;
+  color: #927578;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.duration-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.duration-option,
+.credit-plan-option {
+  appearance: none;
+  border: 1px solid #eadbd8;
+  background: #fffaf8;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.duration-option {
+  min-height: 4.5rem;
+  padding: 0.8rem;
+  border-radius: 0.9rem;
+}
+
+.duration-option strong,
+.duration-option span {
+  display: block;
+}
+
+.duration-option strong {
+  color: #4c3034;
+  font-size: 0.9rem;
+}
+
+.duration-option span {
+  margin-top: 0.25rem;
+  color: #927578;
+  font-size: 0.7rem;
+}
+
+.duration-option:hover,
+.credit-plan-option:hover {
+  border-color: #d8aaa5;
+  background: #fff6f4;
+  transform: translateY(-1px);
+}
+
+.credit-plan-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
+}
+
+.credit-plan-option:disabled:hover {
+  border-color: #eadbd8;
+  background: #fffaf8;
+}
+
+.duration-option.selected,
+.credit-plan-option.selected {
+  border-color: #b56760;
+  background: linear-gradient(180deg, #fff8f6 0%, #fdf0ed 100%);
+  box-shadow: 0 0 0 3px rgba(169, 89, 84, 0.11);
+}
+
+.credit-plan-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.credit-plan-option {
+  position: relative;
+  min-width: 0;
+  padding: 1rem;
+  border-radius: 1rem;
+}
+
+.credit-plan-option-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.credit-plan-option .tier-badge {
+  max-width: calc(100% - 2rem);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-selected-check {
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #a95954;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.credit-plan-name {
+  display: block;
+  margin-top: 1rem;
+  color: #2d181b;
+  font-size: 1.25rem;
+  letter-spacing: -0.035em;
+}
+
+.credit-plan-count {
+  display: block;
+  margin-top: 0.15rem;
+  color: #a95954;
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.credit-plan-count small {
+  color: #8c6e71;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.credit-plan-price {
+  display: block;
+  margin-top: 0.7rem;
+  color: #904840;
+  font-size: 1.05rem;
+}
+
+.credit-plan-price small,
+.credit-plan-total {
+  color: #8c6e71;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.credit-plan-total {
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.credit-plan-description {
+  display: block;
+  min-height: 2.5rem;
+  margin-top: 0.55rem;
+  color: #6d4e52;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.credit-plan-features {
+  display: block;
+  margin-top: 0.75rem;
+  color: #86666a;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.plan-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.75rem;
+  padding: 1rem;
+  border: 1px solid #ead4d0;
+  border-radius: 1rem;
+  background: #fbf1ee;
+}
+
+.plan-selection-bar span,
+.selection-summary span {
+  display: block;
+  color: #927578;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.plan-selection-bar strong {
+  display: block;
+  margin-top: 0.25rem;
+  color: #4b2e32;
+  font-size: 0.9rem;
+}
+
+.btn-plan-continue,
+.btn-plan-payment-disabled,
+.btn-plan-back {
+  min-height: 3rem;
+  border-radius: 0.75rem;
+  font-weight: 800;
+}
+
+.btn-plan-continue {
+  flex: 0 0 auto;
+  border: 0;
+  background: #a95954;
+  box-shadow: 0 7px 18px rgba(169, 89, 84, 0.22);
+  color: #fff;
+  cursor: pointer;
+  padding: 0 1.1rem;
+}
+
+.btn-plan-continue:hover {
+  background: #914641;
+  transform: translateY(-1px);
+}
+
+.btn-plan-continue:disabled {
+  background: #e7dfdd;
+  box-shadow: none;
+  color: #aa9d9a;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.one-off-section {
+  max-width: 62rem;
+  margin: 1.5rem auto 0;
+  padding: clamp(1.1rem, 4vw, 1.6rem);
+  border: 1px solid #eadbd8;
+  border-radius: 1.5rem;
+  background: linear-gradient(135deg, #fff 0%, #fdf8f6 100%);
+}
+
+.one-off-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.one-off-heading h2 {
+  margin: 0.35rem 0 0.25rem;
+  color: #3e2528;
+  font-size: 1.25rem;
+  letter-spacing: -0.035em;
+}
+
+.one-off-heading p {
+  margin: 0;
+  color: #7b5b5f;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.one-off-status {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #ead0cb;
+  border-radius: 999px;
+  background: #fff4f1;
+  color: #a95954;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.one-off-section .packages-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.one-off-section .package-pill {
+  min-width: 0;
+  padding: 0.85rem;
+  text-align: left;
+}
+
+.one-off-section .package-pill small {
+  display: block;
+  margin-top: 0.5rem;
+  color: #b18b87;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+/* Tela de pagamento preparada para futura integração */
+.plan-payment-step {
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.payment-unavailable-card {
+  padding: clamp(1.35rem, 5vw, 2.5rem);
+  border: 1px solid #eadbd8;
+  border-radius: 1.75rem;
+  background: #fff;
+  box-shadow: 0 16px 45px rgba(85, 42, 46, 0.07);
+  text-align: center;
+}
+
+.payment-unavailable-icon {
+  display: grid;
+  width: 3.4rem;
+  height: 3.4rem;
+  margin: 0 auto 1rem;
+  place-items: center;
+  border-radius: 1.15rem;
+  background: #f9e9e5;
+  font-size: 1.55rem;
+}
+
+.payment-unavailable-card h2 {
+  margin: 0.45rem 0 0.65rem;
+  color: #2d181b;
+  font-size: clamp(1.65rem, 5vw, 2.2rem);
+  letter-spacing: -0.045em;
+}
+
+.payment-unavailable-card > p {
+  max-width: 34rem;
+  margin: 0 auto;
+  color: #6d4e52;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.selection-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.65rem;
+  margin-top: 1.5rem;
+  padding: 0.85rem;
+  border: 1px solid #ead4d0;
+  border-radius: 1rem;
+  background: #fbf1ee;
+  text-align: left;
+}
+
+.selection-summary strong {
+  display: block;
+  margin-top: 0.25rem;
+  color: #4b2e32;
+  font-size: 0.9rem;
+}
+
+.payment-actions {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+}
+
+.btn-plan-payment-disabled {
+  width: 100%;
+  border: 1px solid #d9d0ce;
+  background: #eeeceb;
+  color: #8d8180;
+  cursor: not-allowed;
+}
+
+.btn-plan-back {
+  border: 0;
+  background: transparent;
+  color: #a95954;
+  cursor: pointer;
+}
+
+.btn-plan-back:hover {
+  text-decoration: underline;
+}
+
+.payment-safe-note {
+  margin-top: 1rem !important;
+  color: #9b8484 !important;
+  font-size: 0.75rem !important;
+}
+

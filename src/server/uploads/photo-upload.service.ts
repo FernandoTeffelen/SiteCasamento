@@ -13,6 +13,7 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/heif",
 ]);
 const DEFAULT_MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+const ABSOLUTE_MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 export type UploadPhotoFile = {
   size: number;
@@ -61,7 +62,11 @@ function validateClientUploadId(clientUploadId: unknown) {
 
 export function getMaximumUploadBytes() {
   const configuredValue = Number(process.env.MAX_UPLOAD_BYTES ?? DEFAULT_MAX_UPLOAD_BYTES);
-  return Number.isInteger(configuredValue) && configuredValue > 0 ? configuredValue : DEFAULT_MAX_UPLOAD_BYTES;
+  return Number.isSafeInteger(configuredValue)
+    && configuredValue > 0
+    && configuredValue <= ABSOLUTE_MAX_UPLOAD_BYTES
+    ? configuredValue
+    : DEFAULT_MAX_UPLOAD_BYTES;
 }
 
 function isJpeg(bytes: Uint8Array) {

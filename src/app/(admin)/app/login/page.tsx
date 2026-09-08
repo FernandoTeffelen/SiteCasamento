@@ -76,7 +76,7 @@ export default async function AdminLoginPage({
           <div className="demo-credentials-box">
             <span className="demo-tag">ℹ️ Credenciais Demo para Testes:</span>
             <p><strong>E-mail:</strong> <code>cerimonial@demo.test</code></p>
-            <p><strong>Senha:</strong> <code>cerimonial1234</code></p>
+            <p><strong>Senha:</strong> <code>definida no .env local</code></p>
           </div>
 
           <div className="login-card-footer">

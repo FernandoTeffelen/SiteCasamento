@@ -11,6 +11,14 @@ import { confirmAdminPassword } from "@/server/auth/admin-auth.service";
 import { OrganizationRole, WeddingStatus, WeddingTemplateTier } from "@/generated/prisma/client";
 import { defaultWeddingVisualConfig } from "@/lib/templates/wedding-visual-config";
 
+const ALLOWED_IMAGE_CONTENT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
 export type AdminDashboardWedding = {
   id: string;
   publicId: string;
@@ -407,7 +415,7 @@ export async function getAdminPhotoStream(input: { userId: string; photoId: stri
   const stored = await (input.storage ?? objectStorage).get(photo.storageKey);
   return {
     body: stored.body,
-    contentType: photo.contentType,
+    contentType: ALLOWED_IMAGE_CONTENT_TYPES.has(photo.contentType) ? photo.contentType : "application/octet-stream",
   };
 }
 

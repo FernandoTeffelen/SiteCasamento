@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdministrator } from "@/server/auth/admin-auth.service";
-import { assertSameOriginRequest, jsonError } from "@/server/http/api-response";
+import { assertContentLengthWithinLimit, assertSameOriginRequest, jsonError } from "@/server/http/api-response";
 import { addPlatformCustomerCredits } from "@/server/platform/platform-dashboard.service";
 
 export const runtime = "nodejs";
@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request, { params }: { params: Promise<{ customerId: string }> }) {
   try {
     assertSameOriginRequest(request);
+    assertContentLengthWithinLimit(request, 16 * 1024);
     const user = await requirePlatformAdministrator();
     const { customerId } = await params;
     const formData = await request.formData();

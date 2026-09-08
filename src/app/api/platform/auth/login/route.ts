@@ -4,8 +4,9 @@ import {
   PLATFORM_SESSION_COOKIE,
 } from "@/server/auth/admin-auth.service";
 import { isDomainError } from "@/server/domain/error";
-import { jsonError } from "@/server/http/api-response";
+import { assertContentLengthWithinLimit, assertSameOriginRequest, jsonError } from "@/server/http/api-response";
 import { assertRateLimit, assertRequestRateLimit, getRequestClientKey } from "@/server/http/rate-limit";
+import { shouldUseSecureCookies } from "@/server/config/runtime";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,8 @@ export async function POST(request: Request) {
   const isJson = contentType.includes("application/json");
 
   try {
+    assertSameOriginRequest(request);
+    assertContentLengthWithinLimit(request, 16 * 1024);
     assertRequestRateLimit(request, { namespace: "platform-login-ip", limit: 15, windowMs: 15 * 60_000 });
     const body = isJson ? await request.json() : await request.formData();
     const email = isJson ? body.email : body.get("email");
@@ -34,7 +37,7 @@ export async function POST(request: Request) {
         value: session.token,
         httpOnly: true,
         sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
+        secure: shouldUseSecureCookies(),
         path: "/",
         expires: session.expiresAt,
       });
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
       value: session.token,
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: shouldUseSecureCookies(),
       path: "/",
       expires: session.expiresAt,
     });

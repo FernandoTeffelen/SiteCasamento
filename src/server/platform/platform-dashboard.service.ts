@@ -1,4 +1,4 @@
-import { AccountStatus, CreditLedgerEntryType, PlatformRole, SubscriptionStatus, WeddingStatus } from "@/generated/prisma/client";
+import { AccountStatus, AdminAuditAction, CreditLedgerEntryType, PlatformRole, SubscriptionStatus, WeddingStatus } from "@/generated/prisma/client";
 import { randomUUID } from "node:crypto";
 import { assertPlatformAdministratorUser } from "@/server/auth/admin-auth.service";
 import { prisma } from "@/server/db/prisma";
@@ -257,6 +257,14 @@ export async function updatePlatformCustomerStatus(input: {
     if (accountStatus === AccountStatus.SUSPENDED) {
       await transaction.adminSession.deleteMany({ where: { userId: customer.id } });
     }
+    await transaction.adminAuditLog.create({
+      data: {
+        action: AdminAuditAction.CUSTOMER_STATUS_CHANGED,
+        actorUserId: input.userId,
+        customerId: customer.id,
+        metadata: { accountStatus },
+      },
+    });
     return updated;
   });
 }
@@ -265,7 +273,7 @@ export async function deletePlatformCustomer(input: { userId: string; customerId
   await assertPlatformAdministratorUser(input.userId);
   const customer = await prisma.user.findFirst({
     where: { id: input.customerId, platformRole: PlatformRole.USER },
-    select: { id: true },
+    select: { id: true, email: true, name: true },
   });
   if (!customer) throw new DomainError("CUSTOMER_NOT_FOUND", 404, "Cliente não encontrado.");
 
@@ -274,6 +282,18 @@ export async function deletePlatformCustomer(input: { userId: string; customerId
       where: { userId: customer.id },
       select: { organizationId: true },
     });
+    const auditOrganizations = memberships.length ? memberships : [{ organizationId: null }];
+    for (const membership of auditOrganizations) {
+      await transaction.adminAuditLog.create({
+        data: {
+          action: AdminAuditAction.CUSTOMER_DELETED,
+          actorUserId: input.userId,
+          customerId: customer.id,
+          organizationId: membership.organizationId,
+          metadata: { email: customer.email, name: customer.name },
+        },
+      });
+    }
     for (const membership of memberships) {
       const otherMembers = await transaction.organizationMembership.count({
         where: { organizationId: membership.organizationId, userId: { not: customer.id } },
@@ -322,6 +342,15 @@ export async function addPlatformCustomerCredits(input: {
         description: `Crédito${credits === 1 ? "" : "s"} avulso${credits === 1 ? "" : "s"} liberado${credits === 1 ? "" : "s"} manualmente.`,
       },
     });
+    await transaction.adminAuditLog.create({
+      data: {
+        action: AdminAuditAction.CREDIT_ADJUSTED,
+        actorUserId: input.userId,
+        customerId: input.customerId,
+        organizationId: input.organizationId,
+        metadata: { credits, balance: balance.balance, kind: "ONE_TIME_MANUAL_CREDIT" },
+      },
+    });
     return { credits, balance: balance.balance };
   });
 }
@@ -350,5 +379,5 @@ export async function updatePlatformManualAccessPlanStatus(input: {
   status: unknown;
 }) {
   await assertPlatformAdministratorUser(input.userId);
-  return updateManualAccessPlanStatus(input);
+  return updateManualAccessPlanStatus({ ...input, actorUserId: input.userId });
 }

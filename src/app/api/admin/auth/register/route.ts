@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { ADMIN_SESSION_COOKIE, checkUserIsPayingOrActive, registerAdminUser } from "@/server/auth/admin-auth.service";
-import { jsonError } from "@/server/http/api-response";
+import { assertContentLengthWithinLimit, assertSameOriginRequest, jsonError } from "@/server/http/api-response";
 import { isDomainError } from "@/server/domain/error";
 import { assertRequestRateLimit } from "@/server/http/rate-limit";
+import { shouldUseSecureCookies } from "@/server/config/runtime";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,8 @@ export async function POST(request: Request) {
   const isJson = contentType.includes("application/json");
 
   try {
+    assertSameOriginRequest(request);
+    assertContentLengthWithinLimit(request, 16 * 1024);
     assertRequestRateLimit(request, { namespace: "admin-register", limit: 8, windowMs: 60 * 60_000 });
     let name: unknown;
     let email: unknown;
@@ -43,7 +46,7 @@ export async function POST(request: Request) {
         value: session.token,
         httpOnly: true,
         sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
+        secure: shouldUseSecureCookies(),
         path: "/",
         expires: session.expiresAt,
       });
@@ -56,7 +59,7 @@ export async function POST(request: Request) {
       value: session.token,
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: shouldUseSecureCookies(),
       path: "/",
       expires: session.expiresAt,
     });

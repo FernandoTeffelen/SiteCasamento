@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import "./globals.css";
+import "./style/index.css";
 
 export const metadata: Metadata = {
   title: "Jogo de Fotos",
@@ -21,4 +21,3 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     </html>
   );
 }
-

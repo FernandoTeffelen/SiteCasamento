@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { WeddingQrCode } from "@/features/wedding/wedding-qr-code";
 import type { AdminDashboardWedding } from "@/server/admin/admin-weddings.service";
 import { AdminWeddingGallery } from "./admin-wedding-gallery";
 
@@ -24,6 +25,7 @@ export function AdminDashboardClient({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [newlyCreatedWedding, setNewlyCreatedWedding] = useState<AdminDashboardWedding | null>(null);
+  const [qrWedding, setQrWedding] = useState<AdminDashboardWedding | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [weddingToDelete, setWeddingToDelete] = useState<AdminDashboardWedding | null>(null);
   const [deletePassword, setDeletePassword] = useState("");
@@ -294,32 +296,6 @@ export function AdminDashboardClient({
           </div>
         </section>
 
-        {/* Banner de Casamento Criado */}
-        {newlyCreatedWedding && (
-          <section className="created-alert-banner">
-            <div className="alert-content">
-              <span className="alert-icon">🎉</span>
-              <div>
-                <strong>{newlyCreatedWedding.name} criado com sucesso!</strong>
-                <p>O link privado e o jogo já estão disponíveis para os convidados.</p>
-              </div>
-            </div>
-            <div className="alert-actions">
-              <button
-                type="button"
-                className="admin-btn-copy"
-                onClick={() => copyWeddingLink(newlyCreatedWedding.publicId)}
-              >
-                {copiedToken === newlyCreatedWedding.publicId ? "✓ Copiado!" : "📋 Copiar Link"}
-              </button>
-              <a href={`/w/${newlyCreatedWedding.publicId}`} target="_blank" rel="noreferrer" className="admin-btn-open">
-                Abrir Jogo ↗
-              </a>
-              <button type="button" className="alert-close-btn" onClick={() => setNewlyCreatedWedding(null)}>✕</button>
-            </div>
-          </section>
-        )}
-
         {/* Lista de Casamentos */}
         <section className="weddings-section">
           <div className="section-title-row">
@@ -397,6 +373,9 @@ export function AdminDashboardClient({
                         <a href={`/w/${wedding.publicId}`} target="_blank" rel="noreferrer" className="btn-open-link">
                           Abrir ↗
                         </a>
+                        <button type="button" className="btn-show-qr" onClick={() => setQrWedding(wedding)}>
+                          QR Code
+                        </button>
                       </div>
                     </div>
 
@@ -509,6 +488,24 @@ export function AdminDashboardClient({
         </div>
       )}
 
+      {newlyCreatedWedding && (
+        <WeddingQrModal
+          wedding={newlyCreatedWedding}
+          title="Seu QR Code está pronto"
+          description="Compartilhe este QR Code com os convidados para eles entrarem nas missões e enviarem fotos."
+          onClose={() => setNewlyCreatedWedding(null)}
+        />
+      )}
+
+      {qrWedding && (
+        <WeddingQrModal
+          wedding={qrWedding}
+          title={`QR Code de ${qrWedding.name}`}
+          description="Este QR Code leva os convidados diretamente para o acesso privado deste casamento."
+          onClose={() => setQrWedding(null)}
+        />
+      )}
+
       {weddingToDelete && (
         <div className="modal-backdrop" onClick={closeDeleteWeddingModal}>
           <div className="modal-window delete-wedding-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="delete-wedding-title">
@@ -570,6 +567,46 @@ export function AdminDashboardClient({
       {galleryWedding && (
         <AdminWeddingGallery wedding={galleryWedding} onClose={() => setGalleryWedding(null)} />
       )}
+    </div>
+  );
+}
+
+function WeddingQrModal({
+  wedding,
+  title,
+  description,
+  onClose,
+}: {
+  wedding: AdminDashboardWedding;
+  title: string;
+  description: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop wedding-qr-backdrop" onClick={onClose}>
+      <section
+        className="wedding-qr-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`wedding-qr-title-${wedding.id}`}
+      >
+        <div className="wedding-qr-modal-header">
+          <div>
+            <span className="wedding-qr-kicker">Acesso dos convidados</span>
+            <h2 id={`wedding-qr-title-${wedding.id}`}>{title}</h2>
+          </div>
+          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Fechar QR Code">×</button>
+        </div>
+        <p className="wedding-qr-description">{description}</p>
+        <WeddingQrCode key={wedding.publicId} publicId={wedding.publicId} weddingName={wedding.name} />
+        <div className="wedding-qr-modal-footer">
+          <a href={`/w/${wedding.publicId}`} target="_blank" rel="noreferrer" className="admin-btn-open">
+            Abrir experiência →
+          </a>
+          <button type="button" className="btn-cancel" onClick={onClose}>Voltar ao painel</button>
+        </div>
+      </section>
     </div>
   );
 }

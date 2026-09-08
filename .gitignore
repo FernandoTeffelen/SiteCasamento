@@ -55,13 +55,8 @@ Desktop.ini
 *.bak
 .eslintcache
 
-# Arquivos de ideia/anotações locais
-ideia.txt
-ideia2.txt
-ideia3.txt
-ideia4.txt
+# Sentry Config File
+.env.sentry-build-plugin
 
-notas.txt
-
-SiteCasamento_Resumo_do_Projeto.docx
-preços.txt
+# Documentos pessoais e operacionais locais; a documentação pública em docs/ é versionada.
+docs/internal/

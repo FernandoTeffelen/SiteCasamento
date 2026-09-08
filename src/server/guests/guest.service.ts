@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { prisma } from "@/server/db/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { DomainError } from "@/server/domain/error";
@@ -19,6 +20,11 @@ export type GuestIdentity = {
   weddingId: string;
 };
 
+export type PublicGuestIdentity = Pick<
+  GuestIdentity,
+  "token" | "name" | "email" | "age" | "relationshipToCouple" | "hasAvatar" | "updatedAt"
+>;
+
 type GuestRecord = Omit<GuestIdentity, "hasAvatar"> & {
   avatarStorageKey: string | null;
   avatarContentType: string | null;
@@ -30,6 +36,8 @@ export type GuestAvatarFile = {
   name?: string;
   arrayBuffer(): Promise<ArrayBuffer>;
 };
+
+const ALLOWED_AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const guestSelect = {
   id: true,
@@ -59,6 +67,19 @@ function toGuestIdentity(guest: GuestRecord): GuestIdentity {
     weddingId: guest.weddingId,
     updatedAt: guest.updatedAt,
     hasAvatar: Boolean(guest.avatarStorageKey && guest.avatarContentType),
+  };
+}
+
+/** Nunca expõe ids internos nem chaves de organização/casamento na API pública. */
+export function toPublicGuestIdentity(guest: PublicGuestIdentity): PublicGuestIdentity {
+  return {
+    token: guest.token,
+    name: guest.name,
+    email: guest.email,
+    age: guest.age,
+    relationshipToCouple: guest.relationshipToCouple,
+    hasAvatar: guest.hasAvatar,
+    updatedAt: guest.updatedAt,
   };
 }
 
@@ -101,6 +122,10 @@ function normalizeGuestToken(token: unknown) {
   }
 
   return token;
+}
+
+function generateSecureGuestToken() {
+  return crypto.randomBytes(32).toString("base64url");
 }
 
 function normalizeGuestAge(age: unknown) {
@@ -148,7 +173,7 @@ function isWebp(bytes: Uint8Array) {
 
 async function validateGuestAvatar(file: GuestAvatarFile) {
   const contentType = file.type.toLowerCase().trim();
-  if (!["image/jpeg", "image/png", "image/webp"].includes(contentType)) {
+  if (!ALLOWED_AVATAR_TYPES.has(contentType)) {
     throw new DomainError("UNSUPPORTED_AVATAR_FORMAT", 415, "Escolha uma foto em JPEG, PNG ou WebP.");
   }
   if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > 5 * 1024 * 1024) {
@@ -221,7 +246,7 @@ export async function registerOrIdentifyGuest(
   let guest;
   try {
     guest = await prisma.guest.create({
-      data: { organizationId: wedding.organizationId, weddingId: wedding.id, name, email },
+      data: { organizationId: wedding.organizationId, weddingId: wedding.id, name, email, token: generateSecureGuestToken() },
       select: guestSelect,
     });
   } catch (error) {
@@ -346,5 +371,8 @@ export async function getGuestAvatar(input: {
   const storedAvatar = await (input.storage ?? objectStorage).get(avatar.avatarStorageKey).catch(() => {
     throw new DomainError("GUEST_AVATAR_NOT_FOUND", 404, "A foto de perfil não está disponível.");
   });
-  return { body: storedAvatar.body, contentType: avatar.avatarContentType };
+  return {
+    body: storedAvatar.body,
+    contentType: ALLOWED_AVATAR_TYPES.has(avatar.avatarContentType) ? avatar.avatarContentType : "application/octet-stream",
+  };
 }

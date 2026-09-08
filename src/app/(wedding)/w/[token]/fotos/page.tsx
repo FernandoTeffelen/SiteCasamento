@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   description: "Fotos guardadas localmente para o casamento.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default async function WeddingPhotosPage({ params }: { params: Promise<{ token: string }> }) {
   let event: EventView;
   const { token } = await params;

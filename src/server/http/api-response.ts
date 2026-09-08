@@ -1,3 +1,4 @@
+import { assertAllowedRequestOrigin } from "@/server/config/runtime";
 import { DomainError, isDomainError } from "@/server/domain/error";
 
 export function jsonError(error: unknown) {
@@ -5,7 +6,13 @@ export function jsonError(error: unknown) {
     return Response.json({ error: { code: error.code, message: error.message } }, { status: error.status });
   }
 
-  console.error("Unexpected API error", error);
+  // Erros completos podem conter detalhes do banco, caminhos locais ou segredos.
+  // Eles ficam disponíveis apenas no log de desenvolvimento.
+  if (process.env.NODE_ENV === "production") {
+    console.error("Unexpected API error");
+  } else {
+    console.error("Unexpected API error", error);
+  }
   return Response.json(
     { error: { code: "INTERNAL_ERROR", message: "Não foi possível concluir a solicitação." } },
     { status: 500 },
@@ -35,12 +42,25 @@ export function assertContentLengthWithinLimit(request: Request, maxBytes: numbe
   }
 }
 
-/** Cookies administrativos usam SameSite=Lax; Origin acrescenta defesa contra CSRF no navegador. */
+/** Rejeita origens não autorizadas em operações administrativas mutáveis. */
 export function assertSameOriginRequest(request: Request) {
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) {
-    throw new DomainError("CROSS_ORIGIN_REQUEST", 403, "A solicitação foi bloqueada por segurança.");
+  if (origin) {
+    assertAllowedRequestOrigin(request, { required: true });
+    return;
   }
+
+  const referer = request.headers.get("referer");
+  if (referer) {
+    try {
+      assertAllowedRequestOrigin(request, { required: true, originOverride: new URL(referer).origin });
+      return;
+    } catch (error) {
+      if (error instanceof DomainError) throw error;
+    }
+  }
+
+  throw new DomainError("CROSS_ORIGIN_REQUEST", 403, "A solicitaÃ§Ã£o foi bloqueada por seguranÃ§a.");
 }
 
 export function getGuestTokenFromRequest(request: Request) {

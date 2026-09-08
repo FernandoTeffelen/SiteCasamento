@@ -1,0 +1,9 @@
+# Documentação operacional e anotações não fazem parte do artefato publicado.
+docs/
+AGENTS.md
+tests/
+scripts/
+*.docx
+*.txt
+.env
+.env.*

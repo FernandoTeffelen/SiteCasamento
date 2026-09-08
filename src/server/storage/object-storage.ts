@@ -6,7 +6,7 @@ import { S3CompatibleObjectStorage } from "./s3-compatible-object-storage";
 type StorageDriver = "local" | "s3-compatible";
 
 function getStorageDriver(): StorageDriver {
-  const driver = process.env.STORAGE_DRIVER ?? "local";
+  const driver = process.env.STORAGE_DRIVER ?? (process.env.NODE_ENV === "production" ? "s3-compatible" : "local");
   if (driver === "local" || driver === "s3-compatible") return driver;
   throw new Error(`STORAGE_DRIVER inválido: ${driver}`);
 }
@@ -15,6 +15,9 @@ function createObjectStorage(): ObjectStorage {
   const driver = getStorageDriver();
 
   if (driver === "local") {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("STORAGE_DRIVER=local não é permitido em produção.");
+    }
     const rootDirectory = process.env.LOCAL_STORAGE_PATH ?? path.join(process.cwd(), ".local-storage");
     return new LocalObjectStorage(rootDirectory);
   }

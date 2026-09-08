@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/server/auth/admin-auth.service";
 import { createAdminWedding, getAdminDashboardData } from "@/server/admin/admin-weddings.service";
-import { assertSameOriginRequest, jsonError } from "@/server/http/api-response";
+import { assertContentLengthWithinLimit, assertSameOriginRequest, jsonError } from "@/server/http/api-response";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,7 @@ export async function GET() {
   try {
     const user = await requireAdminSession();
     const data = await getAdminDashboardData(user.id);
-    return NextResponse.json(data);
+    return NextResponse.json(data, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return jsonError(error);
   }
@@ -18,6 +18,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
+    assertContentLengthWithinLimit(request, 16 * 1024);
     const user = await requireAdminSession();
     const body = await request.json();
     const wedding = await createAdminWedding({

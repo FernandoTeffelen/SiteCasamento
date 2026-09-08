@@ -17,7 +17,7 @@ export async function DELETE(
       missionId,
       submissionId,
     });
-    return Response.json(result);
+    return Response.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return jsonError(error);
   }

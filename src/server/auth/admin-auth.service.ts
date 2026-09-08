@@ -5,14 +5,14 @@ import { AccountStatus, CustomerType, ManualAccessPlanStatus, OrganizationRole, 
 import { prisma } from "@/server/db/prisma";
 import { DomainError } from "@/server/domain/error";
 import { reconcileManualAccessPlansForOrganizations } from "@/server/billing/manual-access-plan.service";
+import { getDemoAdminPassword, getSessionDurationMs } from "@/server/config/runtime";
 
 const scrypt = promisify(scryptCallback);
 export const ADMIN_SESSION_COOKIE = "sitecasamento_admin_session";
 export const PLATFORM_SESSION_COOKIE = "sitecasamento_platform_session";
-export const DEMO_ADMIN_EMAIL = "cerimonial@demo.test";
-export const DEMO_ADMIN_PASSWORD = "cerimonial1234";
+export const DEMO_ADMIN_EMAIL = process.env.DEMO_ADMIN_EMAIL ?? "cerimonial@demo.test";
+export const DEMO_ADMIN_NAME = process.env.DEMO_ADMIN_NAME ?? "Cerimonialista Demo";
 export const DEMO_CREDIT_BALANCE = 2_147_483_647;
-const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30;
 
 function normalizeEmail(email: unknown) {
   if (typeof email !== "string") throw new DomainError("INVALID_CREDENTIALS", 401, "E-mail ou senha inválidos.");
@@ -44,6 +44,20 @@ function tokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+export function getSessionTokenFromCookieHeader(cookieHeader: string | null, cookieName: string) {
+  const value = cookieHeader
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${cookieName}=`))
+    ?.slice(cookieName.length + 1);
+  if (!value) return undefined;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
+
 async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const derived = await scrypt(password, salt, 64) as Buffer;
@@ -52,7 +66,7 @@ async function hashPassword(password: string) {
 
 async function createSession(userId: string) {
   const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+  const expiresAt = new Date(Date.now() + getSessionDurationMs());
   await prisma.adminSession.create({ data: { userId, tokenHash: tokenHash(token), expiresAt } });
   return { token, expiresAt };
 }
@@ -95,17 +109,19 @@ function isDemoAdminEmail(email: unknown) {
 async function ensureDemoAdminAccount() {
   if (process.env.NODE_ENV === "production") return;
 
-  const passwordHash = await hashPassword(DEMO_ADMIN_PASSWORD);
+  const password = getDemoAdminPassword();
+  if (!password) return;
+  const passwordHash = await hashPassword(password);
   const user = await prisma.user.upsert({
     where: { email: DEMO_ADMIN_EMAIL },
     create: {
       email: DEMO_ADMIN_EMAIL,
-      name: "Cerimonialista Demo",
+      name: DEMO_ADMIN_NAME,
       passwordHash,
       passwordUpdatedAt: new Date(),
     },
     update: {
-      name: "Cerimonialista Demo",
+      name: DEMO_ADMIN_NAME,
       passwordHash,
       passwordUpdatedAt: new Date(),
     },
@@ -146,10 +162,14 @@ async function ensureDemoAdminAccount() {
 export async function setAdminPassword(input: { userId: string; password: unknown }) {
   const password = validatePassword(input.password);
   const passwordHash = await hashPassword(password);
-  return prisma.user.update({
-    where: { id: input.userId },
-    data: { passwordHash, passwordUpdatedAt: new Date() },
-    select: { id: true, email: true, passwordUpdatedAt: true },
+  return prisma.$transaction(async (transaction) => {
+    const updated = await transaction.user.update({
+      where: { id: input.userId },
+      data: { passwordHash, passwordUpdatedAt: new Date() },
+      select: { id: true, email: true, passwordUpdatedAt: true },
+    });
+    await transaction.adminSession.deleteMany({ where: { userId: input.userId } });
+    return updated;
   });
 }
 
@@ -166,22 +186,26 @@ export async function provisionPlatformAdministrator(input: {
     : "Administrador da Plataforma";
   const passwordHash = await hashPassword(password);
 
-  return prisma.user.upsert({
-    where: { email },
-    create: {
-      email,
-      name,
-      passwordHash,
-      passwordUpdatedAt: new Date(),
-      platformRole: PlatformRole.PLATFORM_ADMIN,
-    },
-    update: {
-      name,
-      passwordHash,
-      passwordUpdatedAt: new Date(),
-      platformRole: PlatformRole.PLATFORM_ADMIN,
-    },
-    select: { id: true, email: true, name: true, platformRole: true },
+  return prisma.$transaction(async (transaction) => {
+    const user = await transaction.user.upsert({
+      where: { email },
+      create: {
+        email,
+        name,
+        passwordHash,
+        passwordUpdatedAt: new Date(),
+        platformRole: PlatformRole.PLATFORM_ADMIN,
+      },
+      update: {
+        name,
+        passwordHash,
+        passwordUpdatedAt: new Date(),
+        platformRole: PlatformRole.PLATFORM_ADMIN,
+      },
+      select: { id: true, email: true, name: true, platformRole: true },
+    });
+    await transaction.adminSession.deleteMany({ where: { userId: user.id } });
+    return user;
   });
 }
 
@@ -341,6 +365,7 @@ export async function updateAdminProfile(input: {
   email?: unknown;
   currentPassword?: unknown;
   newPassword?: unknown;
+  preserveSessionToken?: string;
 }) {
   const user = await prisma.user.findUnique({
     where: { id: input.userId },
@@ -373,10 +398,21 @@ export async function updateAdminProfile(input: {
     updateData.passwordUpdatedAt = new Date();
   }
 
-  const updatedUser = await prisma.user.update({
-    where: { id: input.userId },
-    data: updateData,
-    select: { id: true, email: true, name: true },
+  const updatedUser = await prisma.$transaction(async (transaction) => {
+    const updated = await transaction.user.update({
+      where: { id: input.userId },
+      data: updateData,
+      select: { id: true, email: true, name: true },
+    });
+    if (updateData.passwordHash) {
+      await transaction.adminSession.deleteMany({
+        where: {
+          userId: input.userId,
+          ...(input.preserveSessionToken ? { tokenHash: { not: tokenHash(input.preserveSessionToken) } } : {}),
+        },
+      });
+    }
+    return updated;
   });
 
   return updatedUser;
@@ -384,6 +420,9 @@ export async function updateAdminProfile(input: {
 
 async function authenticateUser(input: { email: unknown; password: unknown }, platformOnly: boolean) {
   const email = normalizeEmail(input.email);
+  if (typeof input.password === "string" && (input.password.length < 1 || input.password.length > 256)) {
+    throw new DomainError("INVALID_CREDENTIALS", 401, "E-mail ou senha invÃ¡lidos.");
+  }
   if (typeof input.password !== "string") throw new DomainError("INVALID_CREDENTIALS", 401, "E-mail ou senha inválidos.");
   const user = await prisma.user.findUnique({
     where: { email },
@@ -461,9 +500,9 @@ export async function requirePlatformAdministrator() {
 export async function assertPlatformAdministratorUser(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, platformRole: true },
+    select: { id: true, platformRole: true, accountStatus: true },
   });
-  if (!user || user.platformRole !== PlatformRole.PLATFORM_ADMIN) {
+  if (!user || user.platformRole !== PlatformRole.PLATFORM_ADMIN || user.accountStatus !== AccountStatus.ACTIVE) {
     throw new DomainError("PLATFORM_ADMIN_REQUIRED", 403, "Acesso restrito ao administrador da plataforma.");
   }
   return user;

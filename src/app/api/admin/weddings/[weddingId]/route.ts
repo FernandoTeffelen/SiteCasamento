@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/server/auth/admin-auth.service";
 import { deleteAdminWedding } from "@/server/admin/admin-weddings.service";
-import { assertSameOriginRequest, jsonError, readJsonBody } from "@/server/http/api-response";
+import { assertContentLengthWithinLimit, assertSameOriginRequest, jsonError, readJsonBody } from "@/server/http/api-response";
 
 export const runtime = "nodejs";
 
@@ -11,6 +11,7 @@ export async function DELETE(
 ) {
   try {
     assertSameOriginRequest(request);
+    assertContentLengthWithinLimit(request, 16 * 1024);
     const user = await requireAdminSession();
     const { weddingId } = await params;
     const body = await readJsonBody(request);

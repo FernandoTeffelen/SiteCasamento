@@ -1,5 +1,6 @@
 import { getGuestScore } from "@/server/game/game.service";
-import { updateGuestProfile } from "@/server/guests/guest.service";
+import { toPublicGuestIdentity, updateGuestProfile } from "@/server/guests/guest.service";
+import { toPublicWeddingResponse } from "@/server/events/wedding.service";
 import { assertContentLengthWithinLimit, getGuestTokenFromRequest, jsonError } from "@/server/http/api-response";
 import { assertRateLimit } from "@/server/http/rate-limit";
 
@@ -7,7 +8,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ iden
   try {
     const { identifier } = await params;
     const result = await getGuestScore(identifier, getGuestTokenFromRequest(request));
-    return Response.json(result);
+    return Response.json(
+      { wedding: toPublicWeddingResponse(result.wedding), guest: toPublicGuestIdentity(result.guest) },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (error) {
     return jsonError(error);
   }
@@ -37,7 +41,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       avatar: rawAvatar instanceof File ? rawAvatar : null,
       clearAvatar: formData.get("clearAvatar"),
     });
-    return Response.json(result);
+    return Response.json(
+      { wedding: toPublicWeddingResponse(result.wedding), guest: toPublicGuestIdentity(result.guest) },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (error) {
     return jsonError(error);
   }

@@ -1,4 +1,5 @@
 import { DomainError } from "@/server/domain/error";
+import { getTrustedProxy } from "@/server/config/runtime";
 
 type RateLimitInput = {
   namespace: string;
@@ -51,6 +52,7 @@ export function assertRateLimit(input: RateLimitInput) {
 
 /** O proxy de produção deve sobrescrever x-forwarded-for antes de encaminhar a requisição. */
 export function getRequestClientKey(request: Request) {
+  if (!getTrustedProxy()) return "direct-client";
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   return normalizedKey(forwarded || request.headers.get("x-real-ip") || "unknown");
 }

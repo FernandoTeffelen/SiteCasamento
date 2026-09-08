@@ -1,0 +1,9 @@
+/* A ordem dos imports preserva a cascata visual que existia em globals.css. */
+@import "./base.css";
+@import "./commercial.css";
+@import "./admin-dashboard.css";
+@import "./guest-experience.css";
+@import "./shared-responsive.css";
+@import "./plans.css";
+@import "./platform.css";
+@import "./wedding-qr.css";
