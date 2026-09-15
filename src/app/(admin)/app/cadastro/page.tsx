@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { Suspense, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { currentLegalVersions } from "@/lib/legal/legal-versions";
 
 function RegisterForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [serverError, setServerError] = useState(searchParams.get("error") ?? "");
   const [isPending, startTransition] = useTransition();
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; password?: string; legal?: string }>({});
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -22,12 +23,15 @@ function RegisterForm() {
     const password = data.get("password") as string;
     const confirm = data.get("confirm") as string;
     const customerType = data.get("customerType") as string;
+    const acceptedTerms = data.get("acceptedTerms") === "on";
+    const acknowledgedPrivacy = data.get("acknowledgedPrivacy") === "on";
 
     const errors: typeof fieldErrors = {};
     if (name.length < 2) errors.name = "Informe seu nome completo.";
     if (!email) errors.email = "Informe um e-mail válido.";
     if (password.length < 6) errors.password = "A senha deve ter pelo menos 6 caracteres.";
     if (password !== confirm) errors.password = "As senhas não coincidem.";
+    if (!acceptedTerms || !acknowledgedPrivacy) errors.legal = "Confirme os dois itens para criar sua conta.";
     if (Object.keys(errors).length) { setFieldErrors(errors); return; }
 
     startTransition(async () => {
@@ -35,7 +39,16 @@ function RegisterForm() {
         const res = await fetch("/api/admin/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, password, customerType }),
+          body: JSON.stringify({
+            name,
+            email,
+            password,
+            customerType,
+            acceptedTerms,
+            acknowledgedPrivacy,
+            termsVersion: currentLegalVersions.termsOfUse,
+            privacyVersion: currentLegalVersions.privacyPolicy,
+          }),
         });
         const json = (await res.json()) as { redirectPath?: string; error?: { message?: string } };
         if (!res.ok) {
@@ -84,6 +97,16 @@ function RegisterForm() {
           <label htmlFor="confirm">Confirmar Senha</label>
           <input id="confirm" name="confirm" type="password" autoComplete="new-password" placeholder="Repita a senha" required />
         </div>
+
+        <label className="legal-checkbox">
+          <input name="acceptedTerms" type="checkbox" required />
+          <span>Li e concordo com os <Link href="/termos-de-uso" target="_blank">Termos de Uso</Link> (versão {currentLegalVersions.termsOfUse}).</span>
+        </label>
+        <label className="legal-checkbox">
+          <input name="acknowledgedPrivacy" type="checkbox" required />
+          <span>Declaro que li a <Link href="/privacidade" target="_blank">Política de Privacidade</Link> (versão {currentLegalVersions.privacyPolicy}).</span>
+        </label>
+        {fieldErrors.legal ? <p className="legal-inline-error" role="alert">{fieldErrors.legal}</p> : null}
 
         <button type="submit" className="btn-login-submit" disabled={isPending}>
           {isPending ? "Criando conta..." : "Criar Conta e Entrar ➔"}

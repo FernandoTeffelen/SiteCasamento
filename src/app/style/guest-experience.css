@@ -172,6 +172,8 @@
   text-align: center;
 }
 
+.guest-legal-checkbox { margin-top: 0.75rem; }
+
 .welcome-glow {
   position: absolute;
   z-index: -1;
@@ -694,6 +696,8 @@
   margin-top: 1rem;
 }
 
+.photo-legal-checkbox { margin-top: 1rem; border-radius: 0.8rem; background: #f8eeeb; padding: 0.85rem; }
+
 .photo-preview-actions button {
   width: 100%;
   min-height: 3.45rem;
@@ -901,4 +905,3 @@
     padding: 2rem;
   }
 }
-

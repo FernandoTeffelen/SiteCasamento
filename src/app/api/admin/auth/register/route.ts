@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { ADMIN_SESSION_COOKIE, checkUserIsPayingOrActive, registerAdminUser } from "@/server/auth/admin-auth.service";
+import { ADMIN_SESSION_COOKIE, getAdminDashboardAccess, registerAdminUser } from "@/server/auth/admin-auth.service";
 import { assertContentLengthWithinLimit, assertSameOriginRequest, jsonError } from "@/server/http/api-response";
 import { isDomainError } from "@/server/domain/error";
 import { assertRequestRateLimit } from "@/server/http/rate-limit";
+import { getRequestClientIp } from "@/server/http/rate-limit";
 import { shouldUseSecureCookies } from "@/server/config/runtime";
 
 export const runtime = "nodejs";
@@ -19,6 +20,10 @@ export async function POST(request: Request) {
     let email: unknown;
     let password: unknown;
     let customerType: unknown;
+    let acceptedTerms: unknown;
+    let acknowledgedPrivacy: unknown;
+    let termsVersion: unknown;
+    let privacyVersion: unknown;
 
     if (isJson) {
       const body = await request.json();
@@ -26,21 +31,47 @@ export async function POST(request: Request) {
       email = body.email;
       password = body.password;
       customerType = body.customerType;
+      acceptedTerms = body.acceptedTerms;
+      acknowledgedPrivacy = body.acknowledgedPrivacy;
+      termsVersion = body.termsVersion;
+      privacyVersion = body.privacyVersion;
     } else {
       const formData = await request.formData();
       name = formData.get("name");
       email = formData.get("email");
       password = formData.get("password");
       customerType = formData.get("customerType");
+      acceptedTerms = formData.get("acceptedTerms") === "on";
+      acknowledgedPrivacy = formData.get("acknowledgedPrivacy") === "on";
+      termsVersion = formData.get("termsVersion");
+      privacyVersion = formData.get("privacyVersion");
     }
 
-    const session = await registerAdminUser({ name, email, password, customerType });
-    const isPaying = await checkUserIsPayingOrActive(session.user.id);
+    const session = await registerAdminUser({
+      name,
+      email,
+      password,
+      customerType,
+      acceptedTerms,
+      acknowledgedPrivacy,
+      termsVersion,
+      privacyVersion,
+      evidence: {
+        ipAddress: getRequestClientIp(request),
+        userAgent: request.headers.get("user-agent"),
+      },
+    });
+    const access = await getAdminDashboardAccess(session.user.id);
 
-    const redirectPath = isPaying ? "/app" : "/planos?notice=new_account";
+    const redirectPath = access.canAccessDashboard ? "/app" : "/planos?notice=new_account";
 
     if (isJson) {
-      const response = NextResponse.json({ user: session.user, isPaying, redirectPath });
+      const response = NextResponse.json({
+        user: session.user,
+        access,
+        isPaying: access.canAccessDashboard,
+        redirectPath,
+      });
       response.cookies.set({
         name: ADMIN_SESSION_COOKIE,
         value: session.token,

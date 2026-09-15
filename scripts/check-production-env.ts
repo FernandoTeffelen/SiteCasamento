@@ -60,6 +60,20 @@ if (process.env.STORAGE_DRIVER !== "s3-compatible") {
 }
 for (const name of ["S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]) requireValue(name);
 
+requireValue("MERCADO_PAGO_ACCESS_TOKEN");
+requireValue("MERCADO_PAGO_WEBHOOK_SECRET");
+const mercadoPagoUrl = parseUrl("MERCADO_PAGO_PUBLIC_BASE_URL", requireValue("MERCADO_PAGO_PUBLIC_BASE_URL"));
+if (mercadoPagoUrl) {
+  if (mercadoPagoUrl.protocol !== "https:") errors.push("MERCADO_PAGO_PUBLIC_BASE_URL precisa usar HTTPS.");
+  if (mercadoPagoUrl.pathname !== "/" || mercadoPagoUrl.search || mercadoPagoUrl.hash) {
+    errors.push("MERCADO_PAGO_PUBLIC_BASE_URL deve conter somente protocolo e domínio.");
+  }
+  if (isLocalHost(mercadoPagoUrl.hostname)) errors.push("MERCADO_PAGO_PUBLIC_BASE_URL não pode apontar para localhost.");
+}
+if (process.env.MERCADO_PAGO_USE_SANDBOX !== "false") {
+  errors.push("MERCADO_PAGO_USE_SANDBOX precisa ser false em produção.");
+}
+
 const maxUploadBytes = Number(process.env.MAX_UPLOAD_BYTES);
 const absoluteMaxUploadBytes = 25 * 1024 * 1024;
 if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes < 1 || maxUploadBytes > absoluteMaxUploadBytes) {

@@ -9,6 +9,7 @@ import { clearActiveLocalGuest, getLocalGuestName, getLocalGuestToken, saveLocal
 import { listQueuedPhotos, queuePhoto } from "@/lib/offline/photo-queue";
 import { uploadPendingPhotos, uploadQueuedPhoto, type UploadAttemptResult } from "@/lib/offline/upload-queue";
 import { visualConfigToCssVariables } from "@/lib/templates/wedding-visual-config";
+import { currentLegalVersions } from "@/lib/legal/legal-versions";
 
 type Mission = {
   id: string;
@@ -47,8 +48,10 @@ export function GameClient({ event }: { event: EventView }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingPhoto, setIsSavingPhoto] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [acceptedPhotoTerms, setAcceptedPhotoTerms] = useState(false);
   const syncingRef = useRef(false);
 
   useEffect(() => {
@@ -69,6 +72,8 @@ export function GameClient({ event }: { event: EventView }) {
     }
 
     async function loadGame() {
+      setIsLoading(true);
+      setLoadError(null);
       try {
         const encodedIdentifier = encodeURIComponent(event.identifier);
         const encodedGuestToken = encodeURIComponent(savedToken);
@@ -118,7 +123,7 @@ export function GameClient({ event }: { event: EventView }) {
     return () => {
       isMounted = false;
     };
-  }, [event.identifier, event.publicId, event.publicPath, router]);
+  }, [event.identifier, event.publicId, event.publicPath, router, loadAttempt]);
 
   const completedMissions = missions.filter((mission) => mission.completed).length;
   const totalPhotos = Object.values(localPhotoCounts).reduce((total, count) => total + count, 0);
@@ -136,6 +141,7 @@ export function GameClient({ event }: { event: EventView }) {
     const file = inputEvent.target.files?.[0];
     if (!file || !activeMissionId) return;
     setPreview({ file, missionId: activeMissionId, url: URL.createObjectURL(file) });
+    setAcceptedPhotoTerms(false);
   }
 
   function applyUploadResult(result: UploadAttemptResult) {
@@ -182,7 +188,7 @@ export function GameClient({ event }: { event: EventView }) {
   }, [event.identifier, event.publicId]);
 
   async function acceptPhoto() {
-    if (!preview || !guestToken) return;
+    if (!preview || !guestToken || !acceptedPhotoTerms) return;
     const mission = missions.find((item) => item.id === preview.missionId);
     if (!mission) return;
 
@@ -199,6 +205,11 @@ export function GameClient({ event }: { event: EventView }) {
         guestToken,
         file: preview.file,
         contentType: preview.file.type || "image/jpeg",
+        legalAcceptance: {
+          termsVersion: currentLegalVersions.termsOfUse,
+          privacyVersion: currentLegalVersions.privacyPolicy,
+          acceptedAt: new Date().toISOString(),
+        },
       });
       storedPhotoId = storedPhoto.id;
       setLocalPhotoCounts((counts) => ({ ...counts, [mission.id]: (counts[mission.id] ?? 0) + 1 }));
@@ -225,13 +236,13 @@ export function GameClient({ event }: { event: EventView }) {
   }
 
   if (isLoading) {
-    return <main className="game-screen wedding-themed" style={visualConfigToCssVariables(event.visual) as CSSProperties}><p className="photos-feedback">Carregando o jogo…</p></main>;
+    return <main className="game-screen wedding-themed" style={visualConfigToCssVariables(event.visual) as CSSProperties} aria-busy="true"><div className="game-loading" role="status"><span className="loading-spinner" aria-hidden="true" /><h1>Preparando suas missões</h1><p>Só um instante. Estamos buscando o seu jogo.</p></div><div className="mission-skeleton" aria-hidden="true" /><div className="mission-skeleton" aria-hidden="true" /></main>;
   }
 
   if (loadError) {
     return (
       <main className="game-screen wedding-themed" style={visualConfigToCssVariables(event.visual) as CSSProperties}>
-        <p className="photos-feedback photos-error" role="alert">{loadError}</p>
+        <div className="game-loading"><h1>Vamos tentar de novo?</h1><p className="photos-feedback photos-error" role="alert">{loadError}</p><button className="game-retry-button" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Tentar novamente</button></div>
         <Link className="back-link" href={event.publicPath}>Voltar para o início</Link>
       </main>
     );
@@ -281,6 +292,7 @@ export function GameClient({ event }: { event: EventView }) {
         <div className="score-progress">
           <span>{completedMissions} de {missions.length}</span>
           <span>missões concluídas</span>
+          <progress className="mission-progress-bar" value={completedMissions} max={missions.length || 1} aria-label={`${completedMissions} de ${missions.length} missões concluídas`} />
         </div>
       </section>
 
@@ -300,6 +312,9 @@ export function GameClient({ event }: { event: EventView }) {
           </div>
           <span className="mission-count">{missions.length}</span>
         </div>
+
+        <p className="mission-guidance">Escolha uma missão e toque em “Tirar foto”. Os pontos chegam após a confirmação do envio.</p>
+        {missions.length === 0 ? <div className="game-empty-state"><h3>As missões estão chegando</h3><p>A organização ainda não disponibilizou desafios. Volte daqui a pouco para participar.</p></div> : null}
 
         <div className="mission-list">
           {missions.map((mission) => {
@@ -344,8 +359,12 @@ export function GameClient({ event }: { event: EventView }) {
             {/* A prévia usa uma URL blob local; ela não pode passar pelo otimizador do Next. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="photo-preview-image" src={preview.url} alt="Prévia da foto tirada para a missão" />
+            <label className="legal-checkbox photo-legal-checkbox">
+              <input type="checkbox" checked={acceptedPhotoTerms} disabled={isSavingPhoto} onChange={(event) => setAcceptedPhotoTerms(event.target.checked)} />
+              <span>Confirmo que posso compartilhar esta foto, concordo com os <Link href="/termos-de-uso" target="_blank">Termos de Uso</Link> e li a <Link href="/privacidade" target="_blank">Política de Privacidade</Link>.</span>
+            </label>
             <div className="photo-preview-actions">
-              <button className="use-photo-button" type="button" onClick={acceptPhoto} disabled={isSavingPhoto}>
+              <button className="use-photo-button" type="button" onClick={acceptPhoto} disabled={isSavingPhoto || !acceptedPhotoTerms}>
                 {isSavingPhoto ? "Guardando foto…" : "Usar foto"}
               </button>
               <button className="retake-photo-button" type="button" onClick={takeAgain} disabled={isSavingPhoto}>

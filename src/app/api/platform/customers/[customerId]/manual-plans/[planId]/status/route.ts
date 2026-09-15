@@ -21,7 +21,8 @@ export async function POST(
       planId,
       status: formData.get("status"),
     });
-    return NextResponse.redirect(new URL(`/gestao-interna/clientes/${customerId}`, request.url), 303);
+    const notice = formData.get("status") === "ACTIVE" ? "pix_confirmed" : "plan_canceled";
+    return NextResponse.redirect(new URL(`/gestao-interna/clientes/${customerId}?notice=${notice}`, request.url), 303);
   } catch (error) {
     return jsonError(error);
   }

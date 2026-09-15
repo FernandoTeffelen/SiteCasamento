@@ -1,0 +1,93 @@
+/* Shared interaction rules; wedding colors remain controlled by each template. */
+:where(a, button, input, textarea, select, summary):focus-visible {
+  outline: 3px solid #a95954;
+  outline-offset: 4px;
+}
+:where(button, a, input, select, textarea) { touch-action: manipulation; }
+:where(button):disabled { cursor: wait; }
+:where(input, textarea, select)[aria-invalid="true"] { border-color: #a23d39; }
+
+/* Shared route feedback keeps navigation clear on slow or unstable networks. */
+.route-loading-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  gap: .6rem;
+  padding: max(1.5rem, env(safe-area-inset-top)) 1.5rem max(1.5rem, env(safe-area-inset-bottom));
+  background: #fff8f6;
+  color: #3c2529;
+  text-align: center;
+}
+.route-loading-mark {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto .35rem;
+  place-items: center;
+  border-radius: 50%;
+  background: #f4dfda;
+  color: #a95954;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  animation: loading-pulse 1.2s ease-in-out infinite alternate;
+}
+.route-loading-screen h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.55rem, 7vw, 2rem); font-weight: 500; }
+.route-loading-screen p { max-width: 26rem; margin: 0; color: #76585c; line-height: 1.55; }
+.route-loading-platform { background: #151a25; color: #f7f8fb; }
+.route-loading-platform .route-loading-mark { background: #243e39; color: #8bd5ca; }
+.route-loading-platform p { color: #b9c0cf; }
+.route-loading-wedding { background: #fffdfb; }
+@keyframes loading-pulse { to { transform: scale(1.06); opacity: .72; } }
+
+.guest-entry-steps {
+  display: flex;
+  justify-content: center;
+  gap: .7rem;
+  list-style: none;
+  padding: 1rem 0;
+  margin: 1.5rem 0 0;
+  border-block: 1px solid color-mix(in srgb, var(--wedding-primary) 18%, white);
+}
+.guest-entry-steps li { flex: 1; text-align: center; color: var(--wedding-muted-text); font-size: .75rem; line-height: 1.45; }
+.guest-entry-steps span { display: grid; place-items: center; margin: 0 auto .45rem; width: 1.6rem; height: 1.6rem; border-radius: 50%; color: var(--wedding-primary); background: color-mix(in srgb, var(--wedding-primary) 10%, white); font-weight: 700; }
+.guest-field-hint { font-size: .8125rem; color: var(--wedding-muted-text); line-height: 1.5; margin: .5rem 0 1rem; }
+.entry-form input + label { margin-top: 1.15rem; }
+.entry-form input { scroll-margin-block: 5rem; }
+.mission-guidance { color: var(--wedding-muted-text); font-size: .875rem; line-height: 1.6; margin: .8rem 0 1.3rem; }
+.mission-progress-bar { display: block; width: 100%; height: .3rem; margin-top: .7rem; border: 0; border-radius: 1rem; overflow: hidden; background: #ffffff40; }
+.mission-progress-bar::-webkit-progress-bar { background: #ffffff40; }
+.mission-progress-bar::-webkit-progress-value { background: currentColor; }
+.mission-progress-bar::-moz-progress-bar { background: currentColor; }
+.score-card .mission-progress-bar { color: var(--wedding-primary-foreground); }
+.mission-card h3 { overflow-wrap: anywhere; }
+.mission-card .mission-status-pending { color: #765b4e; }
+.wedding-themed .mission-card:not(.mission-card-completed) .mission-action button { background: var(--wedding-primary); color: var(--wedding-primary-foreground); border-color: var(--wedding-primary); }
+.mission-action button { min-height: 3.25rem; font-size: .9375rem; }
+.game-empty-state { padding: 1.75rem; border: 1px dashed #c9c3b9; border-radius: 1rem; text-align: center; }
+.game-empty-state h3 { margin: 0 0 .75rem; }
+.game-empty-state p { line-height: 1.6; color: var(--wedding-muted-text); margin: 0; }
+.game-loading { max-width: 38rem; margin: 2.5rem auto; text-align: center; }
+.game-loading h1 { font-size: 1.6rem; }
+.game-loading p { color: var(--wedding-muted-text); font-size: .9375rem; line-height: 1.6; }
+.loading-spinner { display: block; width: 2rem; height: 2rem; border: 3px solid #eadbd7; border-top-color: var(--wedding-primary); border-radius: 50%; margin: 0 auto 1rem; animation: loading-turn 1s linear infinite; }
+.mission-skeleton { max-width: 38rem; height: 10rem; margin: 1rem auto; border-radius: 1rem; background: color-mix(in srgb, var(--wedding-primary) 7%, white); }
+.game-retry-button { padding: .8rem 1.5rem; min-height: 48px; border: 0; border-radius: .75rem; background: var(--wedding-primary); color: var(--wedding-primary-foreground); font-weight: 700; cursor: pointer; }
+.btn-toggle-public-access, .btn-delete-wedding, .settings-tab { min-height: 44px; }
+.photo-thumb-card { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: inherit; }
+.admin-login-layout { background: #fff8f6; }
+.login-card { border-color: #ecd9d5; box-shadow: 0 18px 65px #4a212614; }
+.login-card-header h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 2rem; color: #3c2529; }
+.login-field input { background: #fffdfb; border-color: #dfc9c4; }
+.login-field input:focus { border-color: #a95954; box-shadow: 0 0 0 3px #a9595418; }
+.btn-login-submit { background: #a95954; box-shadow: none; }
+.btn-login-submit:hover { background: #914641; }
+@keyframes loading-turn { to { transform: rotate(360deg); } }
+@media (max-width: 47.99rem) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea { font-size: 16px; }
+  .game-screen, .my-photos-screen { padding-left: max(1.25rem, env(safe-area-inset-left)); padding-right: max(1.25rem, env(safe-area-inset-right)); }
+}
+@media (min-width: 48rem) { .admin-login-layout { align-items: center; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

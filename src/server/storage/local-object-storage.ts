@@ -3,7 +3,11 @@ import path from "node:path";
 import type { ObjectStorage, StoredObject, UploadObjectInput } from "@/lib/storage/types";
 
 function resolveStoragePath(rootDirectory: string, storageKey: string) {
-  if (!/^[a-zA-Z0-9/_-]+$/.test(storageKey)) {
+  const segments = storageKey.split("/");
+  if (
+    !/^[a-zA-Z0-9/_.-]+$/.test(storageKey)
+    || segments.some((segment) => !segment || segment === "." || segment === "..")
+  ) {
     throw new Error("Chave de armazenamento inválida.");
   }
 

@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
 import type { EventView } from "@/features/event/types";
 import { getLocalGuestToken } from "@/lib/guest/local-guest";
-import { deleteQueuedPhoto, listQueuedPhotos } from "@/lib/offline/photo-queue";
+import { deleteQueuedPhoto, listQueuedPhotos, updateQueuedPhoto } from "@/lib/offline/photo-queue";
 import type { QueuedPhotoUpload } from "@/lib/offline/types";
+import { currentLegalVersions } from "@/lib/legal/legal-versions";
 import { uploadPendingPhotos, uploadQueuedPhoto, type UploadAttemptResult } from "@/lib/offline/upload-queue";
 import { visualConfigToCssVariables } from "@/lib/templates/wedding-visual-config";
 
@@ -26,6 +27,7 @@ export function MyPhotosClient({ event }: { event: EventView }) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [acceptedLegacyPhotos, setAcceptedLegacyPhotos] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let isMounted = true;
@@ -119,6 +121,10 @@ export function MyPhotosClient({ event }: { event: EventView }) {
   }
 
   async function retryPhoto(photo: LocalPhoto) {
+    if (!photo.legalAcceptance && !acceptedLegacyPhotos[photo.id]) {
+      setFeedback("Confirme os documentos antes de reenviar esta foto.");
+      return;
+    }
     setRetryingPhotoId(photo.id);
     setFeedback(null);
     setPhotos((currentPhotos) => currentPhotos.map((item) => (
@@ -126,7 +132,14 @@ export function MyPhotosClient({ event }: { event: EventView }) {
     )));
 
     try {
-      const result = await uploadQueuedPhoto(event.identifier, photo);
+      const photoToUpload = photo.legalAcceptance ? photo : await updateQueuedPhoto(photo.id, {
+        legalAcceptance: {
+          termsVersion: currentLegalVersions.termsOfUse,
+          privacyVersion: currentLegalVersions.privacyPolicy,
+          acceptedAt: new Date().toISOString(),
+        },
+      });
+      const result = await uploadQueuedPhoto(event.identifier, photoToUpload);
       applyUploadResult(result);
     } catch {
       setFeedback("Não foi possível iniciar o envio. Sua foto continua guardada neste aparelho.");
@@ -183,6 +196,12 @@ export function MyPhotosClient({ event }: { event: EventView }) {
                           <span aria-hidden="true">{status.icon}</span> {status.label}
                         </span>
                         {photo.lastError ? <p className="photo-last-error">{photo.lastError}</p> : null}
+                        {!photo.legalAcceptance && photo.status !== "uploaded" ? (
+                          <label className="legal-checkbox">
+                            <input type="checkbox" checked={Boolean(acceptedLegacyPhotos[photo.id])} onChange={(event) => setAcceptedLegacyPhotos((current) => ({ ...current, [photo.id]: event.target.checked }))} />
+                            <span>Concordo com os <Link href="/termos-de-uso" target="_blank">Termos</Link> e li a <Link href="/privacidade" target="_blank">Política de Privacidade</Link>.</span>
+                          </label>
+                        ) : null}
                         <div className="saved-photo-actions">
                           <button type="button" onClick={() => setSelectedPhoto(photo)}>Abrir foto</button>
                           {photo.status !== "uploaded" && photo.status !== "uploading" ? (

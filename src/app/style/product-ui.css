@@ -1,0 +1,299 @@
+/* A single visual language for commercial, organizer, guest, and platform areas. */
+:root {
+  --sc-wine-950: #3a2228;
+  --sc-wine-800: #65363d;
+  --sc-wine-700: #884944;
+  --sc-wine-600: #a95954;
+  --sc-wine-100: #f9e9e5;
+  --sc-wine-50: #fff8f6;
+  --sc-paper: #fffaf8;
+  --sc-line: #ecd9d5;
+  --sc-muted: #755e62;
+  --sc-shadow: 0 18px 50px rgb(74 33 39 / 8%);
+}
+
+body { background: var(--sc-paper); color: var(--sc-wine-950); }
+
+/* Public marketing and plans */
+.commercial-layout { background: radial-gradient(circle at 93% 0%, #f9e8e4 0, transparent 27rem), var(--sc-paper); }
+.commercial-navbar { background: rgb(255 250 248 / 92%); border-color: var(--sc-line); padding-top: max(.75rem, env(safe-area-inset-top)); }
+.brand-logo .brand-icon { display: grid; place-items: center; width: 2.15rem; height: 2.15rem; border: 1px solid #d9b7b1; border-radius: 50%; font-size: 1.05rem; }
+.brand-text, .brand-logo { color: var(--sc-wine-950); }
+.navbar-links a { color: var(--sc-muted); }
+.navbar-links a:hover, .navbar-links a.active { color: var(--sc-wine-600); }
+.btn-login-nav, .btn-hero-primary, .btn-cta-white { background: var(--sc-wine-600); }
+.btn-login-nav:hover, .btn-hero-primary:hover { background: var(--sc-wine-700); }
+.plans-page-container { max-width: 76rem; padding-top: clamp(2.25rem, 5vw, 4.5rem); }
+.plans-header { max-width: 45rem; margin-bottom: 2.25rem; }
+.plans-header h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(2.35rem, 6vw, 4.35rem); font-weight: 400; line-height: 1.04; }
+.plans-header p { max-width: 37rem; margin-inline: auto; }
+.plans-notice { max-width: 62rem; box-shadow: var(--sc-shadow); }
+
+.plan-stepper { justify-content: flex-start; max-width: 62rem; padding: .85rem 1rem; border: 1px solid var(--sc-line); border-radius: .85rem; background: rgb(255 255 255 / 75%); }
+.plan-builder { position: relative; overflow: hidden; border-color: var(--sc-line); border-radius: 1.45rem; box-shadow: var(--sc-shadow); }
+.plan-builder::before { position: absolute; top: 0; left: 0; width: 100%; height: .3rem; background: linear-gradient(90deg, #b8625d, #e7aca3); content: ""; }
+.plan-builder-intro { padding-top: .5rem; }
+.plan-builder-intro h2, .payment-unavailable-card h2 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.duration-option, .credit-plan-option { min-height: 5.25rem; border-color: var(--sc-line); background: var(--sc-wine-50); }
+.duration-option:hover, .credit-plan-option:hover { border-color: #c88982; background: #fff3f0; }
+.duration-option.selected, .credit-plan-option.selected { border-color: var(--sc-wine-600); background: linear-gradient(180deg, #fffafa, #fae8e4); box-shadow: 0 0 0 3px rgb(169 89 84 / 14%); }
+.credit-plan-option { min-height: 18rem; }
+.plan-selection-bar { position: sticky; bottom: max(.5rem, env(safe-area-inset-bottom)); z-index: 2; border-color: #e4c6c0; background: #fff4f1; box-shadow: 0 10px 30px rgb(74 33 39 / 10%); }
+.btn-plan-continue { background: var(--sc-wine-600); box-shadow: 0 7px 18px rgb(169 89 84 / 22%); }
+.btn-plan-continue:hover { background: var(--sc-wine-700); }
+.one-off-section { border-color: var(--sc-line); box-shadow: 0 8px 30px rgb(74 33 39 / 4%); }
+.payment-unavailable-card { border-color: var(--sc-line); box-shadow: var(--sc-shadow); }
+.payment-unavailable-icon { background: var(--sc-wine-100); }
+.selection-summary { border-color: #e9d0cb; background: var(--sc-wine-50); }
+.payment-safe-note { margin-bottom: 0 !important; }
+
+/* Organizer dashboard and account pages */
+.admin-desktop-layout { background: linear-gradient(180deg, #fffaf8 0, #fdf7f5 100%); }
+.admin-navbar { background: rgb(255 255 255 / 92%); border-color: var(--sc-line); padding-top: max(.9rem, env(safe-area-inset-top)); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.admin-brand-name, .admin-hero-text h1, .section-title-row h2, .wedding-card-title { color: var(--sc-wine-950); }
+.admin-brand-sub, .wedding-card-kicker { color: var(--sc-wine-600); }
+.admin-org-pill { border-color: #e7c8c2; background: var(--sc-wine-50); color: var(--sc-wine-800); }
+.org-dot { background: var(--sc-wine-600); }
+.admin-hero-banner { padding: clamp(1.25rem, 3vw, 2rem); border: 1px solid var(--sc-line); border-radius: 1.5rem; background: radial-gradient(circle at right top, #f6ded8, transparent 20rem), #fff; }
+.admin-hero-text h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.85rem, 4vw, 2.7rem); font-weight: 400; }
+.admin-btn-primary { min-height: 3rem; background: var(--sc-wine-600); box-shadow: 0 8px 20px rgb(169 89 84 / 20%); }
+.admin-btn-primary:hover { background: var(--sc-wine-700); }
+.admin-btn-secondary { min-height: 3rem; border-color: #dfc9c4; background: #fffdfa; }
+.metric-card, .wedding-admin-card, .settings-form, .settings-subscription-info { border-color: var(--sc-line); box-shadow: 0 10px 28px rgb(74 33 39 / 5%); }
+.metric-card { min-height: 6.8rem; border-radius: 1.1rem; }
+.metric-purple, .metric-blue, .metric-green, .metric-amber { background: var(--sc-wine-100); }
+.wedding-admin-card { border-radius: 1.25rem; }
+.wedding-admin-card:hover { box-shadow: var(--sc-shadow); transform: translateY(-2px); }
+.wedding-link-box { border-color: #e8d0ca; background: var(--sc-wine-50); }
+.link-readonly-input { background: #fff; border-color: #dfc9c4; }
+.btn-copy, .btn-open-link, .btn-show-qr { min-height: 2.7rem; border-color: #d6b4ae; color: var(--sc-wine-700); }
+.btn-copy { background: var(--sc-wine-600); color: #fff; }
+.btn-copy:hover { background: var(--sc-wine-700); }
+.admin-settings-link { min-height: 44px; display: inline-flex; align-items: center; color: var(--sc-wine-700); }
+.settings-page { min-height: 100dvh; background: linear-gradient(180deg, #fffaf8, #fdf7f5); }
+.settings-header h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; color: var(--sc-wine-950); }
+.settings-tabs { gap: .35rem; padding: .35rem; border: 1px solid var(--sc-line); border-radius: .85rem; background: #fff; }
+.settings-tab { border-radius: .6rem; border-bottom: 0; color: var(--sc-muted); }
+.settings-tab.active { background: var(--sc-wine-100); color: var(--sc-wine-700); }
+.form-group input, .settings-form input, .settings-form select { border-color: #ddc7c2; background: #fffdfa; }
+
+/* Account entry */
+.admin-login-layout { background: radial-gradient(circle at 80% 5%, #f4dcd7, transparent 24rem), #fffaf8; }
+.login-card { border-color: var(--sc-line); box-shadow: var(--sc-shadow); }
+.login-card-header h1 { color: var(--sc-wine-950); }
+.login-field input { border-color: #ddc7c2; background: #fffdfa; }
+.login-field input:focus { border-color: var(--sc-wine-600); box-shadow: 0 0 0 4px rgb(169 89 84 / 13%); }
+.btn-login-submit { background: var(--sc-wine-600); }
+.btn-login-submit:hover { background: var(--sc-wine-700); }
+
+/* Guest screens: preserve the wedding template colors and improve hierarchy. */
+.wedding-themed .welcome-screen, .wedding-themed .game-screen, .wedding-themed .my-photos-screen { background: var(--wedding-background); }
+.wedding-themed .entry-form, .wedding-themed .guest-switcher { padding: 1rem; border: 1px solid color-mix(in srgb, var(--wedding-primary) 18%, white); border-radius: 1.1rem; background: color-mix(in srgb, var(--wedding-surface) 89%, transparent); box-shadow: 0 10px 28px color-mix(in srgb, var(--wedding-primary) 8%, transparent); }
+.wedding-themed .guest-entry-steps { margin-top: 1.25rem; }
+.wedding-themed .score-card { border-radius: 1.1rem; box-shadow: 0 12px 28px color-mix(in srgb, var(--wedding-primary) 24%, transparent); }
+.wedding-themed .mission-card { border-color: color-mix(in srgb, var(--wedding-primary) 16%, white); border-radius: 1rem; box-shadow: 0 8px 22px color-mix(in srgb, var(--wedding-primary) 6%, transparent); }
+.wedding-themed .mission-card:has(.mission-action button:hover) { border-color: color-mix(in srgb, var(--wedding-primary) 42%, white); }
+.wedding-themed .photos-shortcut { min-width: 10rem; justify-content: center; border: 1px solid color-mix(in srgb, var(--wedding-primary) 22%, white); border-radius: .8rem; background: var(--wedding-surface); }
+.wedding-themed .photo-preview-sheet, .wedding-themed .profile-sheet, .wedding-themed .photo-viewer { border: 1px solid color-mix(in srgb, var(--wedding-primary) 18%, white); }
+
+/* Owner area uses the same burgundy accent while retaining the information-dense layout. */
+.platform-dashboard-layout { background: #fffaf8; color: var(--sc-wine-950); }
+.platform-overview-hero { background: radial-gradient(circle at 90% 0, #9f5858 0, #623840 38%, #35242b 100%); }
+.platform-primary-action, .platform-login-button { background: #a95954; }
+.platform-primary-action:hover, .platform-login-button:hover { background: #8b4845; }
+.platform-overview-section, .platform-overview-grid, .platform-customer-detail-page { background: #fffaf8; }
+.platform-metric-card, .platform-status-card, .platform-next-step, .platform-detail-section, .platform-customer-list article { border-color: var(--sc-line); box-shadow: 0 10px 28px rgb(74 33 39 / 5%); }
+.platform-overview-section-heading h2, .platform-overview-card-heading h2, .platform-next-step h2, .platform-customer-detail-page h1 { color: var(--sc-wine-950); font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.platform-login-layout { background: radial-gradient(circle at 85% 5%, #f5dfda, transparent 25rem), #fffaf8; }
+.platform-login-card { border-color: var(--sc-line); background: #fff; color: var(--sc-wine-950); box-shadow: var(--sc-shadow); }
+.platform-login-kicker { color: var(--sc-wine-600); }
+.platform-login-card h1 { color: var(--sc-wine-950); font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.platform-login-card > p { color: var(--sc-muted); }
+.platform-login-card .login-field label { color: var(--sc-wine-800); }
+.platform-login-card .login-field input { border-color: #dfc9c4; background: #fffdfa; color: var(--sc-wine-950); }
+
+/* Owner platform: the original navy interface used isolated colors per component.
+   Keep the operational density, but make every route share the same wine system. */
+html:has(.platform-overview-hero),
+html:has(.platform-customers-page),
+html:has(.platform-customer-detail-page),
+body:has(.platform-overview-hero),
+body:has(.platform-customers-page),
+body:has(.platform-customer-detail-page) { background: var(--sc-paper); }
+
+.platform-dashboard-layout,
+.platform-customers-page,
+.platform-customer-detail-page { background: var(--sc-paper); color: var(--sc-wine-950); }
+
+.platform-overview-hero {
+  border-color: #7d474d;
+  background: radial-gradient(circle at 88% 0, #b96767 0, #713e45 38%, #3b242a 100%);
+  box-shadow: 0 1.5rem 4.5rem rgb(74 33 39 / 20%);
+}
+.platform-overview-glow { background: radial-gradient(circle, rgb(255 217 207 / 28%), transparent 67%); }
+.platform-overview-logo { border-color: rgb(255 255 255 / 28%); background: rgb(255 255 255 / 12%); color: #ffe5df; }
+.platform-overview-brand small, .platform-overview-note { color: #f3d8d4; }
+.platform-overview-eyebrow { color: #ffd1c8; }
+.platform-overview-copy h1 em { color: #ffd4cb; }
+.platform-primary-action { background: #fff7f4; color: var(--sc-wine-800); }
+.platform-primary-action b { background: var(--sc-wine-700); color: #fff; }
+.platform-overview-note i, .platform-live-indicator i { background: #e9a69c; box-shadow: 0 0 0 .25rem rgb(233 166 156 / 18%); }
+.platform-idle-indicator i { background: #d9a56d; box-shadow: 0 0 0 .25rem rgb(217 165 109 / 18%); }
+
+.platform-overview-section { padding: 0; background: transparent; }
+.platform-overview-section-heading > div > span,
+.platform-next-step-number,
+.platform-eyebrow { color: var(--sc-wine-600); }
+.platform-overview-section-heading h2,
+.platform-overview-card-heading h2,
+.platform-customer-toolbar h2,
+.platform-customers-hero h1,
+.platform-customer-detail-hero h1,
+.platform-detail-section-heading h2 { color: var(--sc-wine-950); }
+.platform-overview-section-heading p,
+.platform-customer-toolbar p,
+.platform-detail-section-heading p { color: var(--sc-muted); }
+.platform-metric-card,
+.platform-metric-card.violet,
+.platform-metric-card.blue,
+.platform-metric-card.coral,
+.platform-metric-card.gold {
+  border-color: var(--sc-line);
+  border-top: .2rem solid var(--sc-wine-600);
+  background: linear-gradient(145deg, #fff, #fff8f6) !important;
+  box-shadow: 0 10px 28px rgb(74 33 39 / 6%);
+}
+.platform-metric-card.blue { border-top-color: #ad6b63; }
+.platform-metric-card.coral { border-top-color: #c47b72; }
+.platform-metric-card.gold { border-top-color: #b4865f; }
+.platform-metric-card span,
+.platform-metric-card small { color: var(--sc-muted); }
+.platform-metric-card strong { color: var(--sc-wine-950); }
+.platform-metric-mark { color: #dab3ad !important; }
+.platform-status-card,
+.platform-next-step {
+  border-color: var(--sc-line);
+  background: #fff;
+  box-shadow: 0 10px 28px rgb(74 33 39 / 6%);
+}
+.platform-status-card dl div { border: 1px solid #f0ded9; background: var(--sc-wine-50); }
+.platform-status-card dt { color: var(--sc-muted); }
+.platform-status-card dd { color: var(--sc-wine-950); }
+.platform-live-indicator { color: #8a514b; background: #f8e3df; }
+.platform-idle-indicator { color: #87623e; background: #fbf0df; }
+.platform-next-step { background: linear-gradient(145deg, #fff, #f9e9e5); }
+.platform-next-step p { color: var(--sc-muted); }
+.platform-next-step a { color: var(--sc-wine-700); }
+
+.platform-customers-hero,
+.platform-customer-detail-hero {
+  border-color: #7d474d;
+  background: radial-gradient(circle at 88% 0, #bd716e 0, #704049 44%, #3b242a 100%);
+  box-shadow: 0 1.3rem 3.5rem rgb(74 33 39 / 18%);
+}
+.platform-customers-hero h1,
+.platform-customer-detail-hero h1 { color: #fffaf8; font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.platform-customers-hero p, .platform-customer-detail-hero p { color: #f1d8d3; }
+.platform-back-link { color: #ffe0d9; }
+.platform-customer-count { border-color: rgb(255 255 255 / 24%); background: rgb(67 34 42 / 28%); }
+.platform-customer-count span { color: #f3d8d4; }
+.platform-customers-hero-actions button,
+.platform-customer-detail-hero > form button { border-color: rgb(255 255 255 / 24%); background: rgb(255 255 255 / 10%); color: #fffaf8; }
+
+.platform-customer-toolbar,
+.platform-customer-card,
+.platform-detail-section {
+  border-color: var(--sc-line);
+  background: #fff;
+  box-shadow: 0 10px 28px rgb(74 33 39 / 6%);
+}
+.platform-customer-search label,
+.platform-access-form label { color: var(--sc-wine-800); }
+.platform-customer-search input,
+.platform-access-form input,
+.platform-access-form select {
+  border-color: #dfc9c4;
+  background: #fffdfa;
+  color: var(--sc-wine-950);
+}
+.platform-customer-search button,
+.platform-access-form button { background: var(--sc-wine-600); color: #fff; }
+.platform-customer-directory-heading p { color: var(--sc-wine-950); }
+.platform-customer-directory-heading span { color: var(--sc-muted); }
+.platform-customer-card { background: linear-gradient(145deg, #fff, #fff9f7); }
+.platform-customer-avatar { background: linear-gradient(135deg, #f2d3cd, #d99791); color: var(--sc-wine-800); }
+.platform-customer-card h3 { color: var(--sc-wine-950); }
+.platform-customer-card-head p,
+.platform-customer-card-metrics dt { color: var(--sc-muted); }
+.platform-customer-card-metrics { border-color: #efded9; }
+.platform-customer-card-metrics div { border-color: #efded9; }
+.platform-customer-card-metrics dd { color: var(--sc-wine-800); }
+.platform-customer-card-metrics .platform-customer-credit-value,
+.platform-detail-highlight,
+.platform-credit-history-list .credit-in { color: var(--sc-wine-600) !important; }
+.platform-customer-card-actions > a { color: var(--sc-wine-700); }
+.platform-account-status.active,
+.platform-plan-status.active { background: #f8e4df; color: #8b4b45; }
+.platform-account-status.suspended,
+.platform-plan-status.expired,
+.platform-plan-status.canceled { background: #f9e2e4; color: #a13f4c; }
+.platform-plan-status.pending_payment { background: #fbf0df; color: #8a6339; }
+.platform-empty-state,
+.platform-detail-empty { border-color: #dfc9c4; background: var(--sc-wine-50); color: var(--sc-muted); }
+.platform-empty-state strong { color: var(--sc-wine-950); }
+.platform-pagination { color: var(--sc-muted); }
+.platform-pagination a { color: var(--sc-wine-700); }
+
+.platform-detail-credit-cycle { background: linear-gradient(145deg, #fff, #f9e9e5); }
+.platform-detail-overview-grid article,
+.platform-detail-credit-cycle-grid article { border-color: #efded9; background: #fffdfa; }
+.platform-detail-overview-grid span,
+.platform-detail-credit-cycle-grid span { color: var(--sc-muted); }
+.platform-detail-overview-grid strong,
+.platform-detail-credit-cycle-grid strong { color: var(--sc-wine-950); }
+.platform-access-mode-tabs { background: #f7e9e5; }
+.platform-access-mode-tabs button { color: var(--sc-muted); }
+.platform-access-mode-tabs button.active { background: #fff; color: var(--sc-wine-700); box-shadow: inset 0 0 0 1px #d9b6b0; }
+.platform-access-form { border-color: #ead5d0; background: #fffaf8; }
+.platform-access-form-copy strong,
+.platform-plan-history-list strong,
+.platform-detail-organizations strong,
+.platform-credit-history-list strong { color: var(--sc-wine-950); }
+.platform-access-form-copy span,
+.platform-plan-history-list span,
+.platform-plan-history-list small,
+.platform-detail-organizations span,
+.platform-detail-organizations small,
+.platform-credit-history-list span { color: var(--sc-muted); }
+.platform-plan-end-date { background: #f8e4df; }
+.platform-plan-end-date span { color: var(--sc-muted); }
+.platform-plan-end-date strong { color: var(--sc-wine-700); }
+.platform-plan-history-list article,
+.platform-detail-organizations article,
+.platform-credit-history-list article { border-color: #efded9; }
+.platform-plan-history button { background: var(--sc-wine-600); color: #fff; }
+.platform-detail-danger { border-color: #e7b9bf; background: linear-gradient(145deg, #fff8f8, #fce9eb); }
+.platform-suspend-button { background: #b44c59; color: #fff; }
+.platform-reactivate-button { background: var(--sc-wine-600); color: #fff; }
+.platform-delete-button { border-color: #d9a3aa; background: #fff7f7; color: #a13f4c; }
+.platform-delete-button:hover { background: #fae5e7; }
+
+/* A useful error state is part of the experience too. */
+.app-error-body { min-height: 100dvh; margin: 0; display: grid; place-items: center; padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(1.25rem, env(safe-area-inset-bottom)); background: radial-gradient(circle at 90% 0, #f4dcd7, transparent 25rem), var(--sc-paper); }
+.app-error-card { width: min(100%, 32rem); padding: clamp(1.7rem, 7vw, 3rem); border: 1px solid var(--sc-line); border-radius: 1.5rem; background: #fff; box-shadow: var(--sc-shadow); text-align: center; }
+.app-error-mark { display: grid; width: 3.5rem; height: 3.5rem; margin: 0 auto 1rem; place-items: center; border-radius: 50%; background: var(--sc-wine-100); color: var(--sc-wine-600); font-family: Georgia, serif; font-size: 2rem; }
+.app-error-kicker { margin: 0 0 .5rem; color: var(--sc-wine-600); font-size: .7rem; font-weight: 800; letter-spacing: .12em; }
+.app-error-card h1 { margin: 0; color: var(--sc-wine-950); font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.75rem, 7vw, 2.45rem); font-weight: 400; letter-spacing: -.045em; }
+.app-error-card p:not(.app-error-kicker) { color: var(--sc-muted); line-height: 1.65; }
+.app-error-button { min-height: 3rem; padding: 0 1.25rem; border: 0; border-radius: .75rem; background: var(--sc-wine-600); color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.app-error-button:hover { background: var(--sc-wine-700); }
+
+@media (max-width: 47.99rem) {
+  .plans-page-container, .admin-main-container { padding-inline: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
+  .plan-stepper { overflow-x: auto; justify-content: flex-start; }
+  .plan-selection-bar { display: grid; padding: .9rem; }
+  .btn-plan-continue { width: 100%; }
+  .admin-hero-controls { width: 100%; display: grid; grid-template-columns: 1fr; }
+  .admin-hero-controls > * { justify-content: center; }
+  .wedding-admin-card:hover { transform: none; }
+}

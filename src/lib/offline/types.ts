@@ -9,6 +9,12 @@ export interface QueuedPhotoUpload {
   guestToken: string;
   file: Blob;
   contentType: string;
+  /** Evidência local preservada com a foto até o servidor confirmar o envio. */
+  legalAcceptance: {
+    termsVersion: string;
+    privacyVersion: string;
+    acceptedAt: string;
+  };
   status: LocalUploadStatus;
   attempts: number;
   /** Identificador do envio persistido no backend, quando confirmado. */

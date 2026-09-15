@@ -1,9 +1,10 @@
-import { Prisma, ScoreEntrySource, SubmissionStatus } from "@/generated/prisma/client";
+import { LegalAcceptanceContext, Prisma, ScoreEntrySource, SubmissionStatus } from "@/generated/prisma/client";
 import type { ObjectStorage } from "@/lib/storage/types";
 import { prisma } from "@/server/db/prisma";
 import { DomainError } from "@/server/domain/error";
 import { getGuestContext } from "@/server/guests/guest.service";
 import { objectStorage } from "@/server/storage/object-storage";
+import { recordLegalAcceptances, type LegalEvidence } from "@/server/legal/legal-acceptance.service";
 
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -22,13 +23,18 @@ export type UploadPhotoFile = {
   arrayBuffer(): Promise<ArrayBuffer>;
 };
 
-type UploadMissionPhotoInput = {
+export type UploadMissionPhotoInput = {
   eventIdentifier: string;
   guestToken: unknown;
   missionId: unknown;
   clientUploadId: unknown;
   file: UploadPhotoFile;
   storage?: ObjectStorage;
+  legal: {
+    accepted: unknown;
+    termsVersion: unknown;
+    privacyVersion: unknown;
+  } & LegalEvidence;
 };
 
 function validateGuestToken(guestToken: unknown) {
@@ -359,6 +365,28 @@ export async function uploadMissionPhoto(input: UploadMissionPhotoInput) {
   const missionId = validateMissionId(input.missionId);
   const clientUploadId = validateClientUploadId(input.clientUploadId);
   const { wedding, guest } = await getGuestContext(input.eventIdentifier, guestToken);
+  await recordLegalAcceptances([
+    {
+      ...input.legal,
+      type: "TERMS_OF_USE",
+      version: input.legal.termsVersion,
+      accepted: input.legal.accepted,
+      context: LegalAcceptanceContext.PHOTO_SUBMISSION,
+      guestId: guest.id,
+      organizationId: wedding.organizationId,
+      contextReference: clientUploadId,
+    },
+    {
+      ...input.legal,
+      type: "PRIVACY_POLICY",
+      version: input.legal.privacyVersion,
+      accepted: input.legal.accepted,
+      context: LegalAcceptanceContext.PHOTO_SUBMISSION,
+      guestId: guest.id,
+      organizationId: wedding.organizationId,
+      contextReference: clientUploadId,
+    },
+  ]);
   // Resolve o evento e o convidado antes de ler os bytes completos do arquivo.
   const photo = await validatePhotoFile(input.file);
   const prepared = await prepareSubmission({

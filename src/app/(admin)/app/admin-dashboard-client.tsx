@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { WeddingQrCode } from "@/features/wedding/wedding-qr-code";
 import type { AdminDashboardWedding } from "@/server/admin/admin-weddings.service";
 import { AdminWeddingGallery } from "./admin-wedding-gallery";
@@ -206,6 +207,8 @@ export function AdminDashboardClient({
 
   const totalGuests = data.weddings.reduce((acc, w) => acc + w.guestCount, 0);
   const totalPhotos = data.weddings.reduce((acc, w) => acc + w.photoCount, 0);
+  const canCreateWedding = data.organization.balance > 0;
+  const hasWeddings = data.weddings.length > 0;
 
   return (
     <div className="admin-desktop-layout">
@@ -230,9 +233,12 @@ export function AdminDashboardClient({
               <span className="user-greeting">
                 Olá, <strong>{userName}</strong>
               </span>
-              <a href="/app/configuracoes" className="admin-settings-link" title="Configurações da conta">
+              <Link href="/app/configuracoes" className="admin-settings-link" title="Configurações da conta">
                 ⚙️ Configurações
-              </a>
+              </Link>
+              <Link href="/planos?notice=manage_plan" className="admin-settings-link" title="Alterar plano ou comprar créditos">
+                Planos e créditos
+              </Link>
               <form action="/api/admin/auth/logout" method="post">
                 <button type="submit" className="logout-button">Sair</button>
               </form>
@@ -250,9 +256,15 @@ export function AdminDashboardClient({
             <p>Acompanhe convidados, fotos enviadas e ranking em tempo real para cada um dos seus eventos.</p>
           </div>
           <div className="admin-hero-controls">
-            <button type="button" className="admin-btn-primary" onClick={() => setShowCreateModal(true)}>
-              <span className="btn-icon">+</span> Criar Novo Casamento
-            </button>
+            {hasWeddings && canCreateWedding ? (
+              <button type="button" className="admin-btn-primary" onClick={() => setShowCreateModal(true)}>
+                <span className="btn-icon">+</span> Criar Novo Casamento
+              </button>
+            ) : hasWeddings ? (
+              <Link href="/planos?notice=manage_plan" className="admin-btn-primary">
+                Comprar créditos
+              </Link>
+            ) : null}
             <button
               type="button"
               className={`admin-btn-secondary ${isRefreshing ? "spinning" : ""}`}
@@ -264,6 +276,16 @@ export function AdminDashboardClient({
           </div>
         </section>
 
+        {!canCreateWedding ? (
+          <section className="admin-access-notice" aria-label="Status dos créditos">
+            <div>
+              <strong>Seu painel continua disponível.</strong>
+              <p>Você pode consultar seus casamentos e fotos normalmente. Para criar um novo casamento, escolha um plano ou compre mais créditos.</p>
+            </div>
+            <a href="/planos?notice=manage_plan">Ver planos e créditos →</a>
+          </section>
+        ) : null}
+
         {/* Métricas Gerais */}
         <section className="admin-metrics-grid">
           <div className="metric-card">
@@ -271,6 +293,13 @@ export function AdminDashboardClient({
             <div className="metric-info">
               <span className="metric-label">Casamentos</span>
               <span className="metric-value">{data.weddings.length}</span>
+            </div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-icon metric-purple">🎟️</div>
+            <div className="metric-info">
+              <span className="metric-label">Créditos disponíveis</span>
+              <span className="metric-value">{data.organization.balance}</span>
             </div>
           </div>
           <div className="metric-card">
@@ -303,14 +332,20 @@ export function AdminDashboardClient({
             <span className="section-hint">Fotos e convidados são sincronizados a cada 15 segundos.</span>
           </div>
 
-          {data.weddings.length === 0 ? (
+          {!hasWeddings ? (
             <div className="empty-weddings-box">
               <span className="empty-icon">💍</span>
               <h3>Nenhum casamento criado ainda</h3>
-              <p>Clique no botão acima para criar o seu primeiro evento e gerar o link do jogo.</p>
-              <button type="button" className="admin-btn-primary" onClick={() => setShowCreateModal(true)}>
-                Criar Meu Primeiro Casamento
-              </button>
+              <p>{canCreateWedding
+                ? "Crie o seu primeiro evento para gerar o link do jogo."
+                : "Adicione um crédito para criar seu primeiro evento e gerar o link do jogo."}</p>
+              {canCreateWedding ? (
+                <button type="button" className="admin-btn-primary" onClick={() => setShowCreateModal(true)}>
+                  Criar Meu Primeiro Casamento
+                </button>
+              ) : (
+                <a href="/planos?notice=manage_plan" className="admin-btn-primary">Escolher plano ou créditos</a>
+              )}
             </div>
           ) : (
             <div className="weddings-grid">
@@ -400,17 +435,18 @@ export function AdminDashboardClient({
                       ) : (
                         <div className="photo-thumbnails-grid">
                           {wedding.recentPhotos.map((photo) => (
-                            <div
+                            <button
+                              type="button"
                               key={photo.id}
                               className="photo-thumb-card"
                               onClick={() => setSelectedPhoto(photo)}
-                              title={`${photo.guestName} — ${photo.missionTitle}`}
+                              aria-label={`Abrir foto de ${photo.guestName}: ${photo.missionTitle}`}
                             >
                               <img src={`/api/admin/photos/${photo.id}`} alt={photo.missionTitle} loading="lazy" className="admin-photo-img" />
                               <div className="photo-thumb-overlay">
                                 <span className="photo-guest-badge">{photo.guestName}</span>
                               </div>
-                            </div>
+                            </button>
                           ))}
                           {remainingPhotos > 0 && (
                             <button
@@ -453,10 +489,10 @@ export function AdminDashboardClient({
       {/* Modal Criar Casamento */}
       {showCreateModal && (
         <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
-          <div className="modal-window" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-window" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-wedding-title">
             <div className="modal-header">
-              <h2>💍 Criar Novo Casamento</h2>
-              <button type="button" className="modal-close-btn" onClick={() => setShowCreateModal(false)}>✕</button>
+              <h2 id="create-wedding-title">💍 Criar Novo Casamento</h2>
+              <button type="button" className="modal-close-btn" onClick={() => setShowCreateModal(false)} aria-label="Fechar">✕</button>
             </div>
             <form onSubmit={handleCreateWedding} className="modal-form">
               <p className="modal-subtitle">
@@ -549,13 +585,13 @@ export function AdminDashboardClient({
       {/* Modal Visualizar Foto */}
       {selectedPhoto && (
         <div className="modal-backdrop" onClick={() => setSelectedPhoto(null)}>
-          <div className="photo-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="photo-modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="selected-photo-title">
             <div className="photo-modal-header">
               <div>
-                <h3>{selectedPhoto.missionTitle}</h3>
+                <h3 id="selected-photo-title">{selectedPhoto.missionTitle}</h3>
                 <p>Enviada por <strong>{selectedPhoto.guestName}</strong></p>
               </div>
-              <button type="button" className="modal-close-btn" onClick={() => setSelectedPhoto(null)}>✕</button>
+              <button type="button" className="modal-close-btn" onClick={() => setSelectedPhoto(null)} aria-label="Fechar foto">✕</button>
             </div>
             <div className="photo-modal-body">
               <img src={`/api/admin/photos/${selectedPhoto.id}`} alt={selectedPhoto.missionTitle} className="photo-modal-full-img" />

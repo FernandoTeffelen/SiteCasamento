@@ -20,6 +20,10 @@ blob-report/
 *.sqlite
 *.sqlite3
 *.db
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Variáveis de ambiente e segredos
 .env
@@ -53,10 +57,11 @@ Desktop.ini
 *.tmp
 *.temp
 *.bak
+*.orig
 .eslintcache
 
 # Sentry Config File
 .env.sentry-build-plugin
 
 # Documentos pessoais e operacionais locais; a documentação pública em docs/ é versionada.
-docs/internal/
+/docs

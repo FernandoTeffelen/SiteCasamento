@@ -46,6 +46,17 @@ export async function uploadQueuedPhoto(
   formData.set("guestToken", uploadingPhoto.guestToken);
   formData.set("uploadId", uploadingPhoto.id);
   formData.set("photo", uploadingPhoto.file, "foto-original");
+  if (!uploadingPhoto.legalAcceptance) {
+    const failedPhoto = await updateQueuedPhoto(photo.id, {
+      status: "failed",
+      lastError: "Confirme os Termos de Uso e a Política de Privacidade antes de reenviar esta foto.",
+    });
+    return { ok: false, photo: failedPhoto, retryWhenOnline: false, message: failedPhoto.lastError ?? "Aceite necessário." };
+  }
+  formData.set("acceptedLegalDocuments", "true");
+  formData.set("termsVersion", uploadingPhoto.legalAcceptance.termsVersion);
+  formData.set("privacyVersion", uploadingPhoto.legalAcceptance.privacyVersion);
+  formData.set("legalAcceptedAt", uploadingPhoto.legalAcceptance.acceptedAt);
 
   try {
     const response = await fetch(

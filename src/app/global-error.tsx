@@ -2,6 +2,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
+import "./style/index.css";
 
 export default function GlobalError({
   error,
@@ -16,11 +17,13 @@ export default function GlobalError({
 
   return (
     <html lang="pt-BR">
-      <body>
-        <main style={{ margin: "4rem auto", maxWidth: 520, padding: "0 1.25rem", fontFamily: "system-ui, sans-serif" }}>
+      <body className="app-error-body">
+        <main className="app-error-card" role="alert">
+          <span className="app-error-mark" aria-hidden="true">♡</span>
+          <p className="app-error-kicker">SITE CASAMENTO</p>
           <h1>Algo não saiu como esperado</h1>
           <p>O erro foi registrado. Tente carregar a página novamente.</p>
-          <button type="button" onClick={() => reset()}>
+          <button className="app-error-button" type="button" onClick={() => reset()}>
             Tentar novamente
           </button>
         </main>

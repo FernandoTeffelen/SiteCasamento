@@ -150,7 +150,8 @@ export async function activateOrganizationSubscription(input: {
     }
 
     const cycleStart = input.cycleStart ?? subscription.currentPeriodStart ?? new Date();
-    const activeSubscription = subscription.status === SubscriptionStatus.ACTIVE
+    const isNewActivation = subscription.status !== SubscriptionStatus.ACTIVE;
+    const activeSubscription = !isNewActivation
       ? subscription
       : await transaction.organizationSubscription.update({
         where: { id: subscription.id },
@@ -165,6 +166,19 @@ export async function activateOrganizationSubscription(input: {
         },
       });
 
+    // Uma troca de plano passa a valer somente após a confirmação do pagamento.
+    // O saldo já concedido pelo plano anterior é preservado para não apagar histórico.
+    if (isNewActivation) {
+      await transaction.organizationSubscription.updateMany({
+        where: {
+          organizationId: subscription.organizationId,
+          id: { not: subscription.id },
+          status: SubscriptionStatus.ACTIVE,
+        },
+        data: { status: SubscriptionStatus.CANCELED, canceledAt: cycleStart },
+      });
+    }
+
     const grant = await grantSubscriptionCycleInTransaction({
       transaction,
       subscription: activeSubscription,
@@ -172,6 +186,66 @@ export async function activateOrganizationSubscription(input: {
     });
     return { subscriptionId: subscription.id, ...grant };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+}
+
+/** Versão transacional para gateways: status da cobrança e crédito são persistidos juntos. */
+export async function activateOrganizationSubscriptionInTransaction(input: {
+  transaction: Transaction;
+  organizationId: string;
+  subscriptionId: string;
+  cycleStart?: Date;
+}) {
+  const subscription = await input.transaction.organizationSubscription.findFirst({
+    where: { id: input.subscriptionId, organizationId: input.organizationId },
+    select: {
+      id: true,
+      organizationId: true,
+      status: true,
+      creditsPerCycle: true,
+      cycleMonths: true,
+      currentPeriodStart: true,
+      currentPeriodEnd: true,
+    },
+  });
+  if (!subscription) throw new DomainError("SUBSCRIPTION_NOT_FOUND", 404, "Assinatura não encontrada nesta organização.");
+  if (subscription.status === SubscriptionStatus.CANCELED || subscription.status === SubscriptionStatus.EXPIRED) {
+    throw new DomainError("SUBSCRIPTION_NOT_AVAILABLE", 409, "Esta assinatura não pode mais ser ativada.");
+  }
+
+  const cycleStart = input.cycleStart ?? subscription.currentPeriodStart ?? new Date();
+  const isNewActivation = subscription.status !== SubscriptionStatus.ACTIVE;
+  const activeSubscription = !isNewActivation
+    ? subscription
+    : await input.transaction.organizationSubscription.update({
+      where: { id: subscription.id },
+      data: { status: SubscriptionStatus.ACTIVE },
+      select: {
+        id: true,
+        organizationId: true,
+        status: true,
+        creditsPerCycle: true,
+        cycleMonths: true,
+        currentPeriodEnd: true,
+      },
+    });
+
+  if (isNewActivation) {
+    await input.transaction.organizationSubscription.updateMany({
+      where: {
+        organizationId: subscription.organizationId,
+        id: { not: subscription.id },
+        status: SubscriptionStatus.ACTIVE,
+      },
+      data: { status: SubscriptionStatus.CANCELED, canceledAt: cycleStart },
+    });
+  }
+
+  const grant = await grantSubscriptionCycleInTransaction({
+    transaction: input.transaction,
+    subscription: activeSubscription,
+    cycleStart,
+  });
+  return { subscriptionId: subscription.id, ...grant };
 }
 
 /** Idempotente por ciclo, para a rotina recorrente que será agendada no futuro. */
@@ -271,6 +345,41 @@ export async function completeOneTimeCreditPurchase(input: { organizationId: str
     });
     return { purchaseId: purchase.id, creditedNow: true, balance: balance.balance };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+}
+
+/** Versão transacional para webhooks; o lançamento e o saldo não podem se separar. */
+export async function completeOneTimeCreditPurchaseInTransaction(input: {
+  transaction: Transaction;
+  organizationId: string;
+  purchaseId: string;
+}) {
+  const purchase = await input.transaction.oneTimePurchase.findFirst({
+    where: { id: input.purchaseId, organizationId: input.organizationId },
+    select: { id: true, organizationId: true, status: true, credits: true, creditEntry: { select: { balanceAfter: true } } },
+  });
+  if (!purchase) throw new DomainError("PURCHASE_NOT_FOUND", 404, "Compra não encontrada nesta organização.");
+  if (purchase.creditEntry) return { purchaseId: purchase.id, creditedNow: false, balance: purchase.creditEntry.balanceAfter };
+  if (purchase.status !== OneTimePurchaseStatus.PENDING) {
+    throw new DomainError("PURCHASE_NOT_COMPLETABLE", 409, "Esta compra não pode conceder créditos.");
+  }
+
+  const balance = await increaseBalance(input.transaction, purchase.organizationId, purchase.credits);
+  await input.transaction.creditLedgerEntry.create({
+    data: {
+      organizationId: purchase.organizationId,
+      purchaseId: purchase.id,
+      type: CreditLedgerEntryType.ONE_TIME_PURCHASE,
+      delta: purchase.credits,
+      balanceAfter: balance.balance,
+      idempotencyKey: `one-time-purchase:${purchase.id}`,
+      description: "Créditos concedidos por compra avulsa.",
+    },
+  });
+  await input.transaction.oneTimePurchase.update({
+    where: { id: purchase.id },
+    data: { status: OneTimePurchaseStatus.COMPLETED, completedAt: new Date() },
+  });
+  return { purchaseId: purchase.id, creditedNow: true, balance: balance.balance };
 }
 
 /** Consome exatamente um crédito ao publicar o casamento, em transação serializável. */

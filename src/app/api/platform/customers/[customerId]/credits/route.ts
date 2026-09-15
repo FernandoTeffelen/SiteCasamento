@@ -18,7 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cus
       organizationId: String(formData.get("organizationId") ?? ""),
       credits: formData.get("credits"),
     });
-    return NextResponse.redirect(new URL(`/gestao-interna/clientes/${customerId}`, request.url), 303);
+    return NextResponse.redirect(new URL(`/gestao-interna/clientes/${customerId}?notice=credits_added`, request.url), 303);
   } catch (error) {
     return jsonError(error);
   }

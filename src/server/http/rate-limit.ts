@@ -52,9 +52,16 @@ export function assertRateLimit(input: RateLimitInput) {
 
 /** O proxy de produção deve sobrescrever x-forwarded-for antes de encaminhar a requisição. */
 export function getRequestClientKey(request: Request) {
-  if (!getTrustedProxy()) return "direct-client";
+  return getRequestClientIp(request) ?? "direct-client";
+}
+
+/** Retorna IP somente quando o proxy confiável foi explicitamente configurado. */
+export function getRequestClientIp(request: Request) {
+  if (!getTrustedProxy()) return null;
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return normalizedKey(forwarded || request.headers.get("x-real-ip") || "unknown");
+  const value = forwarded || request.headers.get("x-real-ip")?.trim();
+  if (!value || value.length > 45 || !/^[0-9a-fA-F:.]+$/.test(value)) return null;
+  return value;
 }
 
 export function assertRequestRateLimit(

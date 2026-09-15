@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ADMIN_SESSION_COOKIE, authenticateAdmin, checkUserIsPayingOrActive } from "@/server/auth/admin-auth.service";
+import { ADMIN_SESSION_COOKIE, authenticateAdmin, getAdminDashboardAccess } from "@/server/auth/admin-auth.service";
 import { assertContentLengthWithinLimit, assertSameOriginRequest, jsonError } from "@/server/http/api-response";
 import { isDomainError } from "@/server/domain/error";
 import { assertRateLimit, assertRequestRateLimit, getRequestClientKey } from "@/server/http/rate-limit";
@@ -36,11 +36,16 @@ export async function POST(request: Request) {
     });
 
     const session = await authenticateAdmin({ email, password });
-    const isPaying = await checkUserIsPayingOrActive(session.user.id);
-    const redirectPath = isPaying ? "/app" : "/planos?notice=subscription_required";
+    const access = await getAdminDashboardAccess(session.user.id);
+    const redirectPath = access.canAccessDashboard ? "/app" : "/planos?notice=subscription_required";
 
     if (isJson) {
-      const response = NextResponse.json({ user: session.user, isPaying, redirectPath });
+      const response = NextResponse.json({
+        user: session.user,
+        access,
+        isPaying: access.canAccessDashboard,
+        redirectPath,
+      });
       response.cookies.set({
         name: ADMIN_SESSION_COOKIE,
         value: session.token,

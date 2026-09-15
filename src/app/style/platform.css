@@ -368,6 +368,35 @@
   cursor: pointer;
 }
 .platform-delete-button:hover { background: #552d38; }
+
+.platform-action-notice {
+  margin: 0 0 1.25rem;
+  padding: .9rem 1rem;
+  border: 1px solid #b4dacc;
+  border-radius: .85rem;
+  background: #e9f6ef;
+  color: #215f47;
+  font-size: .88rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.platform-status-action { display: grid; gap: .4rem; }
+.platform-confirm-pix-button,
+.platform-cancel-plan-button {
+  min-height: 2.5rem;
+  padding: .55rem .75rem;
+  border: 0;
+  border-radius: .65rem;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+.platform-confirm-pix-button { background: var(--sc-wine-600); color: #fff; }
+.platform-confirm-pix-button:hover:not(:disabled) { background: var(--sc-wine-700); }
+.platform-cancel-plan-button { border: 1px solid #d9a3aa; background: #fff7f7; color: #a13f4c; }
+.platform-cancel-plan-button:hover:not(:disabled) { background: #fae5e7; }
+.platform-inline-error { margin: 0; color: #a13f4c; font-size: .76rem; line-height: 1.4; }
 .platform-delete-button:disabled { cursor: wait; opacity: 0.65; }
 .platform-customer-details { gap: 1rem; margin-bottom: 1.25rem; }
 .platform-customer-details article { min-height: 6.2rem; padding: 1.2rem; }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentAdminSession, checkUserIsPayingOrActive } from "@/server/auth/admin-auth.service";
+import { DEMO_ADMIN_EMAIL, getAdminDashboardAccess, getCurrentAdminSession } from "@/server/auth/admin-auth.service";
+import { getDemoAdminPassword } from "@/server/config/runtime";
 
 export const metadata = {
   title: "Acesso da Cerimonialista | SiteCasamento",
@@ -11,19 +12,20 @@ export default async function AdminLoginPage({
 }: {
   searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
-  // Se já está logada e pagante, vai direto para o admin
+  // Uma sessão válida nunca volta a exibir o formulário de login.
   const user = await getCurrentAdminSession();
   if (user) {
-    const isPaying = await checkUserIsPayingOrActive(user.id);
-    if (isPaying) redirect("/app");
+    const access = await getAdminDashboardAccess(user.id);
+    redirect(access.canAccessDashboard ? "/app" : "/planos?notice=subscription_required");
   }
 
   const params = await searchParams;
   const errorMessage = params.error ?? "";
   const notice = params.notice ?? "";
+  const demoPassword = process.env.NODE_ENV === "production" ? null : getDemoAdminPassword();
 
   return (
-    <div className="admin-login-layout">
+    <main className="admin-login-layout">
       <div className="login-card-container">
         <div className="login-card">
           <div className="login-card-header">
@@ -31,34 +33,37 @@ export default async function AdminLoginPage({
               <span className="brand-icon">💍</span>
               <span className="brand-name">SiteCasamento</span>
             </Link>
-            <h1>Painel da Cerimonialista</h1>
-            <p>Acesse sua conta para gerenciar casamentos, missões e fotos em tempo real.</p>
+            <h1>Bom ter você de volta.</h1>
+            <p>Entre para cuidar dos seus casamentos, acompanhar as missões e reunir as fotos.</p>
           </div>
 
           {notice === "subscription_required" && (
             <div className="notice-info-banner">
-              Para acessar o painel, você precisa de um plano ativo. Escolha um plano abaixo.
+              Para acessar o painel, você precisa de um plano ativo. <Link href="/planos">Conhecer os planos</Link>.
             </div>
           )}
 
           {errorMessage && (
-            <div className="form-error-banner">{decodeURIComponent(errorMessage)}</div>
+            <div className="form-error-banner" role="alert">{errorMessage}</div>
           )}
 
           <form action="/api/admin/auth/login" method="post" className="login-form">
             <div className="login-field">
-              <label htmlFor="email">E-mail Profissional</label>
+              <label htmlFor="email">Seu e-mail</label>
               <input
                 id="email"
                 name="email"
                 type="email"
                 autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                inputMode="email"
                 placeholder="seu.email@exemplo.com"
                 required
               />
             </div>
             <div className="login-field">
-              <label htmlFor="password">Senha de Acesso</label>
+              <label htmlFor="password">Sua senha</label>
               <input
                 id="password"
                 name="password"
@@ -69,15 +74,18 @@ export default async function AdminLoginPage({
               />
             </div>
             <button type="submit" className="btn-login-submit">
-              Entrar no Painel ➔
+              Acessar meu painel →
             </button>
           </form>
 
-          <div className="demo-credentials-box">
-            <span className="demo-tag">ℹ️ Credenciais Demo para Testes:</span>
-            <p><strong>E-mail:</strong> <code>cerimonial@demo.test</code></p>
-            <p><strong>Senha:</strong> <code>definida no .env local</code></p>
-          </div>
+          {demoPassword ? (
+            <aside className="demo-credentials-box" aria-label="Acesso local de demonstração">
+              <span className="demo-tag">CONTA TESTE · CRÉDITOS ILIMITADOS</span>
+              <p><strong>E-mail:</strong> <code>{DEMO_ADMIN_EMAIL}</code></p>
+              <p><strong>Senha:</strong> <code>{demoPassword}</code></p>
+              <small>Disponível somente no ambiente local — a cerimonialista que tem todos os créditos do mundo 😄</small>
+            </aside>
+          ) : null}
 
           <div className="login-card-footer">
             <p style={{ margin: "0 0 0.5rem", fontSize: "0.875rem", color: "#6d4e52" }}>
@@ -92,6 +100,6 @@ export default async function AdminLoginPage({
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

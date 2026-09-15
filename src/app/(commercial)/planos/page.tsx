@@ -1,5 +1,10 @@
 import Link from "next/link";
+import { getPublicCommercialCatalog } from "@/server/billing/commercial-catalog.service";
 import { PlansConfigurator } from "./plans-configurator";
+import { getCurrentAdminSession } from "@/server/auth/admin-auth.service";
+import { getAdminDashboardAccess } from "@/server/auth/admin-auth.service";
+import { PublicAccountActions } from "@/features/account/PublicAccountActions";
+import { isMercadoPagoConfigured } from "@/server/payments/mercado-pago.config";
 
 export const metadata = {
   title: "Planos & Créditos | SiteCasamento",
@@ -11,7 +16,12 @@ export default async function PlansPage({
 }: {
   searchParams: Promise<{ notice?: string }>;
 }) {
-  const params = await searchParams;
+  const [params, catalog, session] = await Promise.all([
+    searchParams,
+    getPublicCommercialCatalog(),
+    getCurrentAdminSession(),
+  ]);
+  const access = session ? await getAdminDashboardAccess(session.id) : null;
   const notice = params.notice ?? "";
 
   return (
@@ -27,21 +37,25 @@ export default async function PlansPage({
             <Link href="/planos" className="active">Planos &amp; Preços</Link>
           </nav>
           <div className="navbar-cta">
-            <Link href="/app/login" className="btn-login-nav">Entrar no Painel ➜</Link>
+            <PublicAccountActions user={session} access={access} />
           </div>
         </div>
       </header>
 
       <main className="plans-page-container">
-        {notice === "subscription_required" && (
+        {notice === "subscription_required" && !access?.canAccessDashboard && (
           <div className="notice-info-banner plans-notice">
-            <strong>Plano necessário:</strong> Para acessar o painel da cerimonialista, escolha um plano abaixo.
-            Após o pagamento, você será redirecionada automaticamente.
+            <strong>Sua sessão está ativa.</strong> Escolha um plano ou créditos para liberar seu primeiro casamento e o acesso permanente ao painel.
           </div>
         )}
         {notice === "new_account" && (
           <div className="notice-success-banner plans-notice">
             <strong>Conta criada com sucesso!</strong> Escolha um plano para começar a criar casamentos e experiências fotográficas.
+          </div>
+        )}
+        {notice === "manage_plan" && (
+          <div className="notice-info-banner plans-notice">
+            <strong>Planos e créditos:</strong> compare as opções abaixo para alterar seu plano ou adicionar novos créditos. Nenhuma mudança é feita sem sua confirmação.
           </div>
         )}
 
@@ -51,11 +65,20 @@ export default async function PlansPage({
           <p>Monte sua assinatura em poucos passos ou veja as opções de créditos avulsos.</p>
         </section>
 
-        <PlansConfigurator />
+        <PlansConfigurator
+          catalog={catalog}
+          canRecordCommercialAcceptance={Boolean(session)}
+          paymentConfigured={isMercadoPagoConfigured()}
+        />
 
         <div className="plans-back-action">
           <Link href="/" className="btn-back-home">← Voltar para a Página Inicial</Link>
         </div>
+        <nav className="plans-legal-links" aria-label="Documentos jurídicos">
+          <Link href="/privacidade">Política de Privacidade</Link>
+          <Link href="/termos-de-uso">Termos de Uso</Link>
+          <Link href="/termo-comercial">Termo Comercial</Link>
+        </nav>
       </main>
     </div>
   );

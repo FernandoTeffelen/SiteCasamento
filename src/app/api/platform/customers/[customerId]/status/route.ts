@@ -20,7 +20,7 @@ export async function POST(
       customerId,
       accountStatus: formData.get("accountStatus"),
     });
-    return NextResponse.redirect(new URL(`/gestao-interna/clientes/${customerId}`, request.url), 303);
+    return NextResponse.redirect(new URL(`/gestao-interna/clientes/${customerId}?notice=account_updated`, request.url), 303);
   } catch (error) {
     return jsonError(error);
   }

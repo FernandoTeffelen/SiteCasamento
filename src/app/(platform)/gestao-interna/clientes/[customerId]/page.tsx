@@ -6,6 +6,7 @@ import { isDomainError } from "@/server/domain/error";
 import { getPlatformCustomerDetails } from "@/server/platform/platform-dashboard.service";
 import { DeleteCustomerButton } from "../delete-customer-button";
 import { ManualPlanForm } from "./manual-plan-form";
+import { ManualPlanStatusButton } from "./manual-plan-status-button";
 
 export const metadata = {
   title: "Detalhes do cliente | Gestão interna",
@@ -20,7 +21,22 @@ function formatOptionalDate(date: Date | null) {
   return date ? date.toLocaleDateString("pt-BR") : "—";
 }
 
-export default async function PlatformCustomerDetailsPage({ params }: { params: Promise<{ customerId: string }> }) {
+const notices: Record<string, string> = {
+  pix_confirmed: "PIX confirmado. O plano e os créditos foram liberados para o cliente.",
+  plan_canceled: "Plano cancelado. Os lançamentos anteriores foram preservados no histórico.",
+  credits_added: "Créditos liberados e registrados no histórico da conta.",
+  plan_saved: "Plano manual salvo com sucesso.",
+  monthly_updated: "Ajuste mensal salvo e os créditos adicionais foram liberados.",
+  account_updated: "Status da conta atualizado.",
+};
+
+export default async function PlatformCustomerDetailsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ customerId: string }>;
+  searchParams: Promise<{ notice?: string }>;
+}) {
   let user: Awaited<ReturnType<typeof requirePlatformAdministrator>>;
   try {
     user = await requirePlatformAdministrator();
@@ -28,7 +44,7 @@ export default async function PlatformCustomerDetailsPage({ params }: { params: 
     if (isDomainError(error)) redirect("/gestao-interna/login");
     throw error;
   }
-  const { customerId } = await params;
+  const [{ customerId }, query] = await Promise.all([params, searchParams]);
   let data: Awaited<ReturnType<typeof getPlatformCustomerDetails>>;
   try {
     data = await getPlatformCustomerDetails({ userId: user.id, customerId });
@@ -52,6 +68,8 @@ export default async function PlatformCustomerDetailsPage({ params }: { params: 
         </div>
         <form action="/api/platform/auth/logout" method="post"><button type="submit">Sair</button></form>
       </header>
+
+      {query.notice && notices[query.notice] ? <p className="platform-action-notice" role="status">{notices[query.notice]}</p> : null}
 
       <section className="platform-detail-section platform-detail-overview" aria-labelledby="overview-title">
         <div className="platform-detail-section-heading"><span className="platform-eyebrow">RESUMO</span><h2 id="overview-title">Visão da conta</h2></div>
@@ -86,7 +104,11 @@ export default async function PlatformCustomerDetailsPage({ params }: { params: 
             {manualPlans.length ? <div className="platform-plan-history-list">{manualPlans.map((plan) => (
               <article key={plan.id}>
                 <div><strong>{plan.organizationName}</strong><span>{plan.durationMonths} mês(es) · {plan.creditsPerMonth} crédito(s)/mês</span><small>{plan.startDate.toLocaleDateString("pt-BR")} até {plan.endDate.toLocaleDateString("pt-BR")}</small></div>
-                <div className="platform-plan-history-actions"><span className={`platform-plan-status ${plan.status.toLowerCase()}`}>{planStatusLabel[plan.status]}</span>{plan.status === ManualAccessPlanStatus.PENDING_PAYMENT ? <form action={`/api/platform/customers/${customer.id}/manual-plans/${plan.id}/status`} method="post"><input type="hidden" name="status" value={ManualAccessPlanStatus.ACTIVE} /><button type="submit">Confirmar PIX</button></form> : null}{plan.status === ManualAccessPlanStatus.ACTIVE ? <form action={`/api/platform/customers/${customer.id}/manual-plans/${plan.id}/status`} method="post"><input type="hidden" name="status" value={ManualAccessPlanStatus.CANCELED} /><button type="submit">Cancelar</button></form> : null}</div>
+                <div className="platform-plan-history-actions">
+                  <span className={`platform-plan-status ${plan.status.toLowerCase()}`}>{planStatusLabel[plan.status]}</span>
+                  {plan.status === ManualAccessPlanStatus.PENDING_PAYMENT ? <ManualPlanStatusButton customerId={customer.id} planId={plan.id} action="confirm-pix" /> : null}
+                  {plan.status === ManualAccessPlanStatus.ACTIVE ? <ManualPlanStatusButton customerId={customer.id} planId={plan.id} action="cancel" /> : null}
+                </div>
               </article>
             ))}</div> : <div className="platform-detail-empty">Ainda não há liberações mensais registradas.</div>}
           </section>

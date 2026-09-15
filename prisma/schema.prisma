@@ -99,6 +99,46 @@ enum OneTimePurchaseStatus {
   REFUNDED
 }
 
+enum PaymentProvider {
+  MERCADO_PAGO
+}
+
+enum PaymentProductType {
+  SUBSCRIPTION_PLAN
+  CREDIT_PACKAGE
+  CREDIT_VOLUME
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELED
+  REFUNDED
+  ERROR
+}
+
+enum PaymentWebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum PaymentProcessingTrigger {
+  WEBHOOK
+  MANUAL_REPROCESS
+}
+
+enum PaymentProcessingStatus {
+  STARTED
+  SUCCEEDED
+  FAILED
+  SKIPPED
+}
+
 enum CreditLedgerEntryType {
   ONE_TIME_PURCHASE
   SUBSCRIPTION_CYCLE
@@ -127,6 +167,18 @@ enum AdminAuditAction {
   MANUAL_PLAN_CREATED
   MANUAL_PLAN_UPDATED
   MANUAL_PLAN_STATUS_CHANGED
+}
+
+enum LegalDocumentType {
+  PRIVACY_POLICY
+  TERMS_OF_USE
+  COMMERCIAL_TERMS
+}
+
+enum LegalAcceptanceContext {
+  REGISTRATION
+  CHECKOUT
+  PHOTO_SUBMISSION
 }
 
 /// Catálogo global da plataforma. Um template pode ser reutilizado por várias organizações e casamentos.
@@ -173,6 +225,8 @@ model Organization {
   purchases         OneTimePurchase[]
   entitlements      OrganizationEntitlement[]
   adminAuditLogs    AdminAuditLog[]
+  legalAcceptances  LegalAcceptance[]
+  paymentAttempts   PaymentAttempt[]
 }
 
 model User {
@@ -197,6 +251,8 @@ model User {
   createdManualAccessPlans ManualAccessPlan[]       @relation("ManualAccessPlanCreatedBy")
   adminAuditActorLogs      AdminAuditLog[]          @relation("AdminAuditActor")
   adminAuditCustomerLogs   AdminAuditLog[]          @relation("AdminAuditCustomer")
+  legalAcceptances         LegalAcceptance[]
+  paymentAttempts          PaymentAttempt[]
 
   @@index([platformRole, accountStatus, createdAt(sort: Desc)])
 }
@@ -292,6 +348,24 @@ model CreditPackage {
   @@index([active])
 }
 
+/// Faixas globais para compra personalizada de créditos avulsos. O valor
+/// unitário é aplicado a toda a quantidade escolhida dentro da faixa.
+model CreditVolumeTier {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  minCredits     Int
+  maxCredits     Int
+  unitPriceCents Int
+  currency       String   @default("BRL")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  purchases OneTimePurchase[]
+
+  @@index([active, minCredits, maxCredits])
+}
+
 /// Uma opção específica do catálogo: categoria + período. Os créditos são
 /// concedidos por ciclo: Starter trimestral, por exemplo, concede 9 créditos.
 model SubscriptionPlan {
@@ -361,9 +435,10 @@ model OrganizationSubscription {
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 
-  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  plan          SubscriptionPlan    @relation(fields: [planId], references: [id], onDelete: Restrict)
-  creditEntries CreditLedgerEntry[]
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan           SubscriptionPlan    @relation(fields: [planId], references: [id], onDelete: Restrict)
+  creditEntries  CreditLedgerEntry[]
+  paymentAttempt PaymentAttempt?
 
   @@index([organizationId, status])
   @@index([status, currentPeriodEnd])
@@ -410,25 +485,120 @@ model CreditLedgerEntry {
 /// Registro de uma intenção/compra avulsa. Sem gateway, permanece PENDING até
 /// uma integração autorizada concluir a compra e conceder o crédito.
 model OneTimePurchase {
-  id                String                @id @default(cuid())
-  organizationId    String
-  creditPackageId   String
-  status            OneTimePurchaseStatus @default(PENDING)
-  credits           Int
-  priceCents        Int?
-  currency          String                @default("BRL")
-  idempotencyKey    String
-  providerPaymentId String?               @unique
-  completedAt       DateTime?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  id                 String                @id @default(cuid())
+  organizationId     String
+  creditPackageId    String?
+  creditVolumeTierId String?
+  status             OneTimePurchaseStatus @default(PENDING)
+  credits            Int
+  priceCents         Int?
+  currency           String                @default("BRL")
+  idempotencyKey     String
+  providerPaymentId  String?               @unique
+  completedAt        DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
-  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  creditPackage CreditPackage      @relation(fields: [creditPackageId], references: [id], onDelete: Restrict)
-  creditEntry   CreditLedgerEntry?
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creditPackage    CreditPackage?     @relation(fields: [creditPackageId], references: [id], onDelete: Restrict)
+  creditVolumeTier CreditVolumeTier?  @relation(fields: [creditVolumeTierId], references: [id], onDelete: Restrict)
+  creditEntry      CreditLedgerEntry?
+  paymentAttempt   PaymentAttempt?
 
   @@unique([organizationId, idempotencyKey])
   @@index([organizationId, status, createdAt])
+}
+
+/// Tentativa de pagamento criada antes de abrir o checkout hospedado. O valor,
+/// moeda e produto sao snapshots definidos exclusivamente pelo servidor.
+model PaymentAttempt {
+  id                   String               @id @default(cuid())
+  organizationId       String
+  userId               String
+  subscriptionId       String?              @unique
+  purchaseId           String?              @unique
+  provider             PaymentProvider      @default(MERCADO_PAGO)
+  productType          PaymentProductType
+  status               PaymentAttemptStatus @default(CREATED)
+  credits              Int
+  priceCents           Int
+  currency             String               @default("BRL")
+  externalReference    String               @unique
+  idempotencyKey       String
+  providerPreferenceId String?              @unique
+  providerPaymentId    String?              @unique
+  providerStatus       String?
+  checkoutUrl          String?
+  processedAt          DateTime?
+  lastWebhookAt        DateTime?
+  lastErrorCode        String?
+  lastErrorMessage     String?              @db.VarChar(2000)
+  lastProcessedAt      DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  subscription       OrganizationSubscription?  @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  purchase           OneTimePurchase?           @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  webhookEvents      PaymentWebhookEvent[]
+  processingAttempts PaymentProcessingAttempt[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, status, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+/// Entrega recebida no endpoint de webhook. O payload fica preservado para
+/// auditoria; a concessão de produto só ocorre após consulta ao provedor.
+model PaymentWebhookEvent {
+  id                String                    @id @default(cuid())
+  paymentAttemptId  String?
+  provider          PaymentProvider           @default(MERCADO_PAGO)
+  providerPaymentId String
+  notificationType  String
+  action            String?
+  deliveryKey       String                    @unique
+  signatureValid    Boolean
+  payload           Json
+  status            PaymentWebhookEventStatus @default(RECEIVED)
+  processingCount   Int                       @default(0)
+  lastErrorCode     String?
+  lastErrorMessage  String?                   @db.VarChar(2000)
+  receivedAt        DateTime                  @default(now())
+  processedAt       DateTime?
+  nextRetryAt       DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  paymentAttempt     PaymentAttempt?            @relation(fields: [paymentAttemptId], references: [id], onDelete: SetNull)
+  processingAttempts PaymentProcessingAttempt[]
+
+  @@index([provider, providerPaymentId, receivedAt(sort: Desc)])
+  @@index([status, nextRetryAt])
+  @@index([paymentAttemptId, receivedAt(sort: Desc)])
+}
+
+/// Cada processamento ou reprocessamento é registrado separadamente, permitindo
+/// investigar falhas temporárias sem duplicar a liberação do produto.
+model PaymentProcessingAttempt {
+  id               String                   @id @default(cuid())
+  paymentAttemptId String?
+  webhookEventId   String?
+  trigger          PaymentProcessingTrigger
+  status           PaymentProcessingStatus  @default(STARTED)
+  errorCode        String?
+  errorMessage     String?                  @db.VarChar(2000)
+  startedAt        DateTime                 @default(now())
+  completedAt      DateTime?
+  createdAt        DateTime                 @default(now())
+
+  paymentAttempt PaymentAttempt?      @relation(fields: [paymentAttemptId], references: [id], onDelete: SetNull)
+  webhookEvent   PaymentWebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: Cascade)
+
+  @@index([paymentAttemptId, createdAt(sort: Desc)])
+  @@index([webhookEventId, createdAt(sort: Desc)])
+  @@index([status, createdAt])
 }
 
 /// Catálogo extensível de funcionalidades comerciais. Ele já pode representar
@@ -535,15 +705,64 @@ model Guest {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  wedding      Wedding      @relation(fields: [weddingId, organizationId], references: [id, organizationId], onDelete: Cascade)
-  submissions  Submission[]
-  photos       Photo[]
-  scoreEntries ScoreEntry[]
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  wedding          Wedding           @relation(fields: [weddingId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  submissions      Submission[]
+  photos           Photo[]
+  scoreEntries     ScoreEntry[]
+  legalAcceptances LegalAcceptance[]
 
   @@unique([id, weddingId, organizationId])
   @@unique([organizationId, weddingId, email])
   @@index([organizationId, weddingId, score(sort: Desc)])
+}
+
+/// Versao publicada de um documento juridico. O hash permite comprovar qual
+/// conteudo estava associado a uma versao sem depender do texto atual da pagina.
+model LegalDocumentVersion {
+  id          String            @id @default(cuid())
+  type        LegalDocumentType
+  version     String
+  title       String
+  publicPath  String
+  contentHash String
+  effectiveAt DateTime
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  acceptances LegalAcceptance[]
+
+  @@unique([type, version])
+  @@index([type, active, effectiveAt(sort: Desc)])
+}
+
+/// Evidencia imutavel do aceite ou da ciencia manifestada na interface.
+/// IP fica nulo quando a infraestrutura nao fornece um endereco confiavel.
+model LegalAcceptance {
+  id                String                 @id @default(cuid())
+  documentVersionId String
+  context           LegalAcceptanceContext
+  userId            String?
+  guestId           String?
+  organizationId    String?
+  contextReference  String?
+  acceptedAt        DateTime               @default(now())
+  clientAcceptedAt  DateTime?
+  ipAddress         String?                @db.VarChar(45)
+  userAgent         String?                @db.VarChar(512)
+  contextSnapshot   Json?
+  idempotencyKey    String                 @unique
+
+  documentVersion LegalDocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  user            User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guest           Guest?               @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  organization    Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, acceptedAt(sort: Desc)])
+  @@index([guestId, acceptedAt(sort: Desc)])
+  @@index([organizationId, acceptedAt(sort: Desc)])
+  @@index([documentVersionId, acceptedAt(sort: Desc)])
 }
 
 model Mission {

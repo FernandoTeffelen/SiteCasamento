@@ -107,7 +107,7 @@ export async function deleteQueuedPhoto(photoId: string): Promise<void> {
 
 export type QueuedPhotoUpdate = Partial<Pick<
   QueuedPhotoUpload,
-  "status" | "attempts" | "remoteSubmissionId" | "lastError"
+  "status" | "attempts" | "remoteSubmissionId" | "lastError" | "legalAcceptance"
 >>;
 
 export async function updateQueuedPhoto(

@@ -1,10 +1,11 @@
 import crypto from "node:crypto";
 import { prisma } from "@/server/db/prisma";
-import { Prisma } from "@/generated/prisma/client";
+import { LegalAcceptanceContext, Prisma } from "@/generated/prisma/client";
 import { DomainError } from "@/server/domain/error";
 import { assertWeddingIsActive, findWeddingByPublicAccessToken, type PublicWedding } from "@/server/events/wedding.service";
 import { objectStorage } from "@/server/storage/object-storage";
 import type { ObjectStorage } from "@/lib/storage/types";
+import { recordLegalAcceptances, type LegalEvidence } from "@/server/legal/legal-acceptance.service";
 
 export type GuestIdentity = {
   id: string;
@@ -191,7 +192,16 @@ async function validateGuestAvatar(file: GuestAvatarFile) {
 
 export async function registerOrIdentifyGuest(
   eventIdentifier: string,
-  input: { name: unknown; email?: unknown; guestToken?: unknown },
+  input: {
+    name: unknown;
+    email?: unknown;
+    guestToken?: unknown;
+    acceptedTerms: unknown;
+    acknowledgedPrivacy: unknown;
+    termsVersion: unknown;
+    privacyVersion: unknown;
+    evidence?: LegalEvidence;
+  },
 ): Promise<{ wedding: PublicWedding; guest: GuestIdentity; created: boolean }> {
   const wedding = await findWeddingByPublicAccessToken(eventIdentifier);
   assertWeddingIsActive(wedding);
@@ -199,64 +209,89 @@ export async function registerOrIdentifyGuest(
   const email = normalizeGuestEmail(input.email);
   const existingToken = normalizeGuestToken(input.guestToken);
 
-  if (existingToken) {
-    const existingGuest = await prisma.guest.findFirst({
-      where: { organizationId: wedding.organizationId, weddingId: wedding.id, token: existingToken },
-      select: guestSelect,
-    });
+  return prisma.$transaction(async (transaction) => {
+    async function complete(guest: GuestIdentity, created: boolean) {
+      await recordLegalAcceptances([
+        {
+          type: "TERMS_OF_USE",
+          version: input.termsVersion,
+          accepted: input.acceptedTerms,
+          context: LegalAcceptanceContext.REGISTRATION,
+          guestId: guest.id,
+          organizationId: wedding.organizationId,
+          contextReference: wedding.id,
+          ...input.evidence,
+        },
+        {
+          type: "PRIVACY_POLICY",
+          version: input.privacyVersion,
+          accepted: input.acknowledgedPrivacy,
+          context: LegalAcceptanceContext.REGISTRATION,
+          guestId: guest.id,
+          organizationId: wedding.organizationId,
+          contextReference: wedding.id,
+          ...input.evidence,
+        },
+      ], transaction);
+      return { wedding, guest, created };
+    }
 
-    if (existingGuest && (!existingGuest.email || !email || existingGuest.email === email)) {
-      if (existingGuest.email && email && existingGuest.email !== email) {
-        throw new DomainError("GUEST_EMAIL_MISMATCH", 409, "Este aparelho já está vinculado a outro e-mail neste casamento.");
-      }
-      if (!existingGuest.email && email) {
-        try {
-          const updatedGuest = await prisma.guest.update({
+    if (existingToken) {
+      const existingGuest = await transaction.guest.findFirst({
+        where: { organizationId: wedding.organizationId, weddingId: wedding.id, token: existingToken },
+        select: guestSelect,
+      });
+
+      if (existingGuest && (!existingGuest.email || !email || existingGuest.email === email)) {
+        if (existingGuest.email && email && existingGuest.email !== email) {
+          throw new DomainError("GUEST_EMAIL_MISMATCH", 409, "Este aparelho já está vinculado a outro e-mail neste casamento.");
+        }
+        if (!existingGuest.email && email) {
+          try {
+            const updatedGuest = await transaction.guest.update({
+              where: { id: existingGuest.id },
+              data: { email },
+              select: guestSelect,
+            });
+            return complete(toGuestIdentity(updatedGuest), false);
+          } catch (error) {
+            if (isUniqueGuestEmailError(error)) {
+              throw new DomainError("GUEST_EMAIL_IN_USE", 409, "Este e-mail já foi usado por outro convidado neste casamento.");
+            }
+            throw error;
+          }
+        }
+        if (existingGuest.name !== name) {
+          const updatedGuest = await transaction.guest.update({
             where: { id: existingGuest.id },
-            data: { email },
+            data: { name },
             select: guestSelect,
           });
-          return { wedding, guest: toGuestIdentity(updatedGuest), created: false };
-        } catch (error) {
-          if (isUniqueGuestEmailError(error)) {
-            throw new DomainError("GUEST_EMAIL_IN_USE", 409, "Este e-mail já foi usado por outro convidado neste casamento.");
-          }
-          throw error;
+          return complete(toGuestIdentity(updatedGuest), false);
         }
+        return complete(toGuestIdentity(existingGuest), false);
       }
-      if (existingGuest.name !== name) {
-        const updatedGuest = await prisma.guest.update({
-          where: { id: existingGuest.id },
-          data: { name },
-          select: guestSelect,
-        });
-        return { wedding, guest: toGuestIdentity(updatedGuest), created: false };
+    }
+
+    // Um nome diferente no mesmo aparelho inicia uma nova identidade. Isso evita
+    // que o primeiro convidado fique preso ao formulário para sempre.
+    if (!email) {
+      throw new DomainError("GUEST_EMAIL_REQUIRED", 400, "Informe seu e-mail para diferenciar seu perfil no casamento.");
+    }
+
+    try {
+      const guest = await transaction.guest.create({
+        data: { organizationId: wedding.organizationId, weddingId: wedding.id, name, email, token: generateSecureGuestToken() },
+        select: guestSelect,
+      });
+      return complete(toGuestIdentity(guest), true);
+    } catch (error) {
+      if (isUniqueGuestEmailError(error)) {
+        throw new DomainError("GUEST_EMAIL_IN_USE", 409, "Este e-mail já foi usado por outro convidado neste casamento.");
       }
-      return { wedding, guest: toGuestIdentity(existingGuest), created: false };
+      throw error;
     }
-  }
-
-  // Um nome diferente no mesmo aparelho inicia uma nova identidade. Isso evita
-  // que o primeiro convidado fique preso ao formulário para sempre, sem
-  // permitir que o token de outro casamento seja reutilizado.
-  if (!email) {
-    throw new DomainError("GUEST_EMAIL_REQUIRED", 400, "Informe seu e-mail para diferenciar seu perfil no casamento.");
-  }
-
-  let guest;
-  try {
-    guest = await prisma.guest.create({
-      data: { organizationId: wedding.organizationId, weddingId: wedding.id, name, email, token: generateSecureGuestToken() },
-      select: guestSelect,
-    });
-  } catch (error) {
-    if (isUniqueGuestEmailError(error)) {
-      throw new DomainError("GUEST_EMAIL_IN_USE", 409, "Este e-mail já foi usado por outro convidado neste casamento.");
-    }
-    throw error;
-  }
-
-  return { wedding, guest: toGuestIdentity(guest), created: true };
+  });
 }
 
 export async function findGuestForWedding(

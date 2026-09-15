@@ -22,7 +22,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cus
       status: formData.get("status"),
       adjustmentMode: formData.get("adjustmentMode"),
     });
-    return NextResponse.redirect(new URL(`/gestao-interna/clientes/${customerId}`, request.url), 303);
+    const notice = formData.get("adjustmentMode") === "INCREASE_CREDITS" ? "monthly_updated" : "plan_saved";
+    return NextResponse.redirect(new URL(`/gestao-interna/clientes/${customerId}?notice=${notice}`, request.url), 303);
   } catch (error) {
     return jsonError(error);
   }

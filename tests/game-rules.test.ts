@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { after, before, test } from "node:test";
 import {
   AccountStatus,
   CustomerType,
+  LegalAcceptanceContext,
   ManualAccessPlanStatus,
   OrganizationRole,
   PlatformRole,
@@ -16,6 +21,7 @@ import {
   WeddingTemplateTier,
 } from "../src/generated/prisma/client";
 import type { ObjectStorage } from "../src/lib/storage/types";
+import { LocalObjectStorage } from "../src/server/storage/local-object-storage";
 import { prisma } from "../src/server/db/prisma";
 import { DomainError } from "../src/server/domain/error";
 import {
@@ -33,6 +39,7 @@ import { findWeddingForOrganizationUser } from "../src/server/organizations/orga
 import {
   authenticateAdmin,
   authenticatePlatformAdministrator,
+  getAdminDashboardAccess,
   getAdminSessionFromToken,
   getAdminSubscriptionSummary,
   getPlatformSessionFromToken,
@@ -78,8 +85,17 @@ import {
   deleteGuestSubmission,
   uploadMissionPhoto,
   type UploadPhotoFile,
+  type UploadMissionPhotoInput,
 } from "../src/server/uploads/photo-upload.service";
+import { currentLegalVersions } from "../src/lib/legal/legal-versions";
 import { assertRateLimit, resetRateLimitForTests } from "../src/server/http/rate-limit";
+import {
+  createMercadoPagoCheckout,
+  receiveMercadoPagoWebhook,
+  reprocessMercadoPagoWebhookEvent,
+} from "../src/server/payments/payment-checkout.service";
+import { verifyMercadoPagoSignature } from "../src/server/payments/mercado-pago-signature";
+import type { MercadoPagoGateway, MercadoPagoPayment, MercadoPagoPreferenceInput } from "../src/server/payments/mercado-pago.client";
 
 const testSuffix = crypto.randomUUID();
 const eventAToken = generateSecureWeddingToken();
@@ -115,6 +131,36 @@ function createJpegFile(name = "foto.jpg"): UploadPhotoFile {
       return jpegBytes.slice().buffer;
     },
   };
+}
+
+const testRegistrationLegal = {
+  acceptedTerms: true,
+  acknowledgedPrivacy: true,
+  termsVersion: currentLegalVersions.termsOfUse,
+  privacyVersion: currentLegalVersions.privacyPolicy,
+} as const;
+
+function uploadMissionPhotoWithLegal(input: Omit<UploadMissionPhotoInput, "legal">) {
+  return uploadMissionPhoto({
+    ...input,
+    legal: {
+      accepted: true,
+      termsVersion: currentLegalVersions.termsOfUse,
+      privacyVersion: currentLegalVersions.privacyPolicy,
+      clientAcceptedAt: new Date().toISOString(),
+    },
+  });
+}
+
+function registerTestGuest(eventIdentifier: string, input: { name: unknown; email?: unknown; guestToken?: unknown }) {
+  return registerOrIdentifyGuest(eventIdentifier, {
+    ...input,
+    acceptedTerms: true,
+    acknowledgedPrivacy: true,
+    termsVersion: currentLegalVersions.termsOfUse,
+    privacyVersion: currentLegalVersions.privacyPolicy,
+    evidence: { clientAcceptedAt: new Date().toISOString() },
+  });
 }
 
 class MemoryStorage implements ObjectStorage {
@@ -162,6 +208,19 @@ test("rate limiting local bloqueia excesso e libera uma nova janela", () => {
   );
   assertRateLimit({ namespace: "test", key: "ip", limit: 2, windowMs: 1_000, now: 2_000 });
   resetRateLimitForTests();
+});
+
+test("armazenamento local aceita extensões de imagem sem permitir travessia de diretório", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "sitecasamento-storage-"));
+  const storage = new LocalObjectStorage(directory);
+  try {
+    await storage.put({ storageKey: "weddings/event/photo.jpg", body: jpegBytes, contentType: "image/jpeg" });
+    assert.deepEqual(Array.from((await storage.get("weddings/event/photo.jpg")).body), Array.from(jpegBytes));
+    await assert.rejects(() => storage.put({ storageKey: "../escape.jpg", body: jpegBytes, contentType: "image/jpeg" }));
+    await assert.rejects(() => storage.put({ storageKey: "weddings/../escape.jpg", body: jpegBytes, contentType: "image/jpeg" }));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 before(async () => {
@@ -331,6 +390,64 @@ test("login administrativo usa senha com hash e sessão opaca revogável", async
   assert.equal(await getAdminSessionFromToken(session.token), null);
 });
 
+test("cliente mantém acesso ao painel depois de consumir uma compra avulsa", async () => {
+  const password = "senha-acesso-permanente-123";
+  const customer = await registerAdminUser({
+    ...testRegistrationLegal,
+    name: "Cliente com histórico",
+    email: `lifetime-access-${crypto.randomUUID()}@example.test`,
+    password,
+  });
+  const membership = await prisma.organizationMembership.findFirstOrThrow({
+    where: { userId: customer.user.id },
+    select: { organizationId: true },
+  });
+  const oneCreditPackage = await prisma.creditPackage.create({
+    data: {
+      slug: `lifetime-one-credit-${crypto.randomUUID()}`,
+      name: "1 crédito para teste de acesso",
+      credits: 1,
+      priceCents: 15_000,
+    },
+  });
+
+  try {
+    assert.deepEqual(await getAdminDashboardAccess(customer.user.id), {
+      canAccessDashboard: false,
+      hasCommercialHistory: false,
+      hasActivePlan: false,
+      creditsAvailable: 0,
+    });
+
+    const purchase = await createOneTimeCreditPurchase({
+      organizationId: membership.organizationId,
+      creditPackageId: oneCreditPackage.id,
+      idempotencyKey: `lifetime-access-${crypto.randomUUID()}`,
+    });
+    await completeOneTimeCreditPurchase({
+      organizationId: membership.organizationId,
+      purchaseId: purchase.purchase.id,
+    });
+    assert.equal((await getAdminDashboardAccess(customer.user.id)).canAccessDashboard, true);
+
+    const wedding = await createAdminWedding({
+      userId: customer.user.id,
+      brideName: "Ana",
+      groomName: "Luiz",
+    });
+    await deleteAdminWedding({ userId: customer.user.id, weddingId: wedding.id, password });
+
+    const accessAfterUsingEverything = await getAdminDashboardAccess(customer.user.id);
+    assert.equal(accessAfterUsingEverything.creditsAvailable, 0);
+    assert.equal(accessAfterUsingEverything.hasCommercialHistory, true);
+    assert.equal(accessAfterUsingEverything.canAccessDashboard, true);
+  } finally {
+    await prisma.organization.delete({ where: { id: membership.organizationId } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: customer.user.id } }).catch(() => undefined);
+    await prisma.creditPackage.delete({ where: { id: oneCreditPackage.id } }).catch(() => undefined);
+  }
+});
+
 test("área interna da plataforma rejeita sessão comum e protege dados no backend", async () => {
   const regularUser = await prisma.user.create({
     data: { email: `regular-platform-${crypto.randomUUID()}@example.test`, name: "Usuário comum" },
@@ -375,11 +492,20 @@ test("administrador da plataforma pesquisa clientes e pode suspender ou reativar
   });
   const email = `couple-${crypto.randomUUID()}@example.test`;
   const registration = await registerAdminUser({
+    ...testRegistrationLegal,
     name: "Casal de teste",
     email,
     password: "senha-do-casal-de-teste-123",
     customerType: CustomerType.COUPLE,
   });
+  const registrationAcceptances = await prisma.legalAcceptance.findMany({
+    where: { userId: registration.user.id, context: LegalAcceptanceContext.REGISTRATION },
+    include: { documentVersion: true },
+  });
+  assert.deepEqual(
+    registrationAcceptances.map((item) => item.documentVersion.type).sort(),
+    ["PRIVACY_POLICY", "TERMS_OF_USE"],
+  );
 
   const list = await getPlatformCustomers({ userId: owner.id, search: "casal de teste" });
   const listedCustomer = list.customers.find((customer) => customer.id === registration.user.id);
@@ -411,12 +537,30 @@ test("administrador da plataforma pesquisa clientes e pode suspender ou reativar
   assert.equal(restored.user.id, registration.user.id);
 });
 
+test("cadastro rejeita versões jurídicas ausentes ou sem aceite", async () => {
+  const email = `legal-missing-${crypto.randomUUID()}@example.test`;
+  await assert.rejects(
+    () => registerAdminUser({
+      name: "Cadastro sem aceite",
+      email,
+      password: "senha-segura-de-teste-123",
+      acceptedTerms: false,
+      acknowledgedPrivacy: false,
+      termsVersion: undefined,
+      privacyVersion: undefined,
+    }),
+    (error: unknown) => error instanceof DomainError && error.code === "LEGAL_ACCEPTANCE_REQUIRED",
+  );
+  assert.equal(await prisma.user.count({ where: { email } }), 0);
+});
+
 test("liberação manual por PIX preserva histórico e concede créditos mensais uma única vez", async () => {
   const owner = await provisionPlatformAdministrator({
     email: `pix-owner-${crypto.randomUUID()}@example.test`,
     password: "senha-do-dono-pix-manual-123",
   });
   const customer = await registerAdminUser({
+    ...testRegistrationLegal,
     name: "Cerimonialista Maria",
     email: `maria-pix-${crypto.randomUUID()}@example.test`,
     password: "senha-da-maria-pix-teste-123",
@@ -782,12 +926,12 @@ test("o banco bloqueia vínculos entre organizações e entre casamentos", async
 });
 
 test("identifica o convidado apenas dentro do próprio casamento", async () => {
-  const firstAccess = await registerOrIdentifyGuest(eventAToken, { name: "Marina", email: "marina@example.test" });
+  const firstAccess = await registerTestGuest(eventAToken, { name: "Marina", email: "marina@example.test" });
   guestAToken = firstAccess.guest.token;
   guestAId = firstAccess.guest.id;
   assert.equal(firstAccess.created, true);
 
-  const secondAccess = await registerOrIdentifyGuest(eventAToken, {
+  const secondAccess = await registerTestGuest(eventAToken, {
     name: "Marina",
     email: "marina@example.test",
     guestToken: guestAToken,
@@ -797,7 +941,7 @@ test("identifica o convidado apenas dentro do próprio casamento", async () => {
   assert.equal(secondAccess.guest.name, "Marina");
   assert.equal(secondAccess.guest.email, "marina@example.test");
 
-  const renamedAccess = await registerOrIdentifyGuest(eventAToken, {
+  const renamedAccess = await registerTestGuest(eventAToken, {
     name: "Marina Souza",
     email: "marina@example.test",
     guestToken: guestAToken,
@@ -806,7 +950,7 @@ test("identifica o convidado apenas dentro do próprio casamento", async () => {
   assert.equal(renamedAccess.guest.id, guestAId);
   assert.equal(renamedAccess.guest.name, "Marina Souza");
 
-  const differentName = await registerOrIdentifyGuest(eventAToken, {
+  const differentName = await registerTestGuest(eventAToken, {
     name: "Outro convidado",
     email: "outro-convidado@example.test",
     guestToken: guestAToken,
@@ -814,7 +958,7 @@ test("identifica o convidado apenas dentro do próprio casamento", async () => {
   assert.equal(differentName.created, true);
   assert.notEqual(differentName.guest.token, guestAToken);
 
-  const accessToOtherEvent = await registerOrIdentifyGuest(eventBToken, {
+  const accessToOtherEvent = await registerTestGuest(eventBToken, {
     name: "Marina",
     email: "marina-evento-b@example.test",
     guestToken: guestAToken,
@@ -824,7 +968,7 @@ test("identifica o convidado apenas dentro do próprio casamento", async () => {
   assert.notEqual(accessToOtherEvent.guest.token, guestAToken);
 
   await assert.rejects(
-    () => registerOrIdentifyGuest(eventAToken, { name: "Outra Marina", email: "marina@example.test" }),
+    () => registerTestGuest(eventAToken, { name: "Outra Marina", email: "marina@example.test" }),
     (error: unknown) => error instanceof DomainError && error.code === "GUEST_EMAIL_IN_USE",
   );
 });
@@ -875,7 +1019,7 @@ test("persiste o perfil opcional no convidado e protege a foto pelo casamento", 
 
 test("calcula pontos no servidor somente uma vez por missão enviada", async () => {
   const storage = new MemoryStorage();
-  const firstCompletion = await uploadMissionPhoto({
+  const firstCompletion = await uploadMissionPhotoWithLegal({
     eventIdentifier: eventAToken,
     guestToken: guestAToken,
     missionId: missionAId,
@@ -896,8 +1040,18 @@ test("calcula pontos no servidor somente uma vez por missão enviada", async () 
   assert.equal(photo.moderationStatus, PhotoModerationStatus.PENDING);
   assert.equal(history.source, ScoreEntrySource.MISSION_COMPLETION);
   assert.equal(history.points, 110);
+  const photoAcceptances = await prisma.legalAcceptance.findMany({
+    where: {
+      guestId: guestAId,
+      context: LegalAcceptanceContext.PHOTO_SUBMISSION,
+      contextReference: { not: null },
+    },
+    include: { documentVersion: true },
+  });
+  assert.ok(photoAcceptances.some((item) => item.documentVersion.type === "TERMS_OF_USE"));
+  assert.ok(photoAcceptances.some((item) => item.documentVersion.type === "PRIVACY_POLICY"));
 
-  const repeatedCompletion = await uploadMissionPhoto({
+  const repeatedCompletion = await uploadMissionPhotoWithLegal({
     eventIdentifier: eventAToken,
     guestToken: guestAToken,
     missionId: missionAId,
@@ -921,7 +1075,7 @@ test("lista somente missões do casamento e bloqueia missão de outro evento", a
   assert.equal(missions.missions[0]?.submissionCount, 2);
 
   await assert.rejects(
-    () => uploadMissionPhoto({
+    () => uploadMissionPhotoWithLegal({
       eventIdentifier: eventAToken,
       guestToken: guestAToken,
       missionId: missionBId,
@@ -949,7 +1103,7 @@ test("marca o envio como falho e permite reenviar a mesma foto sem perdê-la", a
   const uploadId = `upload-${crypto.randomUUID()}`;
 
   await assert.rejects(
-    () => uploadMissionPhoto({
+    () => uploadMissionPhotoWithLegal({
       eventIdentifier: eventAToken,
       guestToken: guest.token,
       missionId: mission.id,
@@ -967,7 +1121,7 @@ test("marca o envio como falho e permite reenviar a mesma foto sem perdê-la", a
   assert.equal(await prisma.photo.count({ where: { submissionId: failedSubmission.id } }), 0);
 
   const storage = new MemoryStorage();
-  const retry = await uploadMissionPhoto({
+  const retry = await uploadMissionPhotoWithLegal({
     eventIdentifier: eventAToken,
     guestToken: guest.token,
     missionId: mission.id,
@@ -997,8 +1151,8 @@ test("um upload repetido é idempotente e não concede pontos duplicados", async
     storage,
   };
 
-  const firstUpload = await uploadMissionPhoto(input);
-  const repeatedUpload = await uploadMissionPhoto(input);
+  const firstUpload = await uploadMissionPhotoWithLegal(input);
+  const repeatedUpload = await uploadMissionPhotoWithLegal(input);
 
   assert.equal(firstUpload.awardedNow, true);
   assert.equal(repeatedUpload.alreadyUploaded, true);
@@ -1023,7 +1177,7 @@ test("rejeita um arquivo que finge ser foto antes de criar um envio", async () =
   };
 
   await assert.rejects(
-    () => uploadMissionPhoto({
+    () => uploadMissionPhotoWithLegal({
       eventIdentifier: eventAToken,
       guestToken: guest.token,
       missionId: mission.id,
@@ -1042,7 +1196,7 @@ test("excluir uma foto própria remove o envio e recalcula os pontos", async () 
     data: { organizationId: organizationAId, weddingId: eventAId, title: "Missão para excluir", points: 55, displayOrder: 5 },
   });
   const storage = new MemoryStorage();
-  const upload = await uploadMissionPhoto({
+  const upload = await uploadMissionPhotoWithLegal({
     eventIdentifier: eventAToken,
     guestToken: guest.token,
     missionId: mission.id,
@@ -1148,7 +1302,7 @@ test("casamento sem expiração próxima permanece ativo e acessível indefinida
   assert.equal(eventView.brideName, "Sofia");
   assert.equal(eventView.groomName, "Lucas");
 
-  const guestRegistration = await registerOrIdentifyGuest(perpetualToken, {
+  const guestRegistration = await registerTestGuest(perpetualToken, {
     name: "Convidado Perpétuo",
     email: `perpetuo-${testSuffix}@example.test`,
   });
@@ -1219,13 +1373,13 @@ test("revogação manual bloqueia acesso público e restauração reativa sem pe
     },
   });
 
-  const guestAccess = await registerOrIdentifyGuest(revocableToken, {
+  const guestAccess = await registerTestGuest(revocableToken, {
     name: "Convidada Beatriz",
     email: `beatriz-${testSuffix}@example.test`,
   });
 
   const storage = new MemoryStorage();
-  const photoUpload = await uploadMissionPhoto({
+  const photoUpload = await uploadMissionPhotoWithLegal({
     eventIdentifier: revocableToken,
     guestToken: guestAccess.guest.token,
     missionId: mission.id,
@@ -1298,7 +1452,7 @@ test("rotação de token gera novo identificador seguro, invalida o antigo e pre
     },
   });
 
-  const guest = await registerOrIdentifyGuest(initialToken, {
+  const guest = await registerTestGuest(initialToken, {
     name: "Convidado Rotação",
     email: `rotacao-${testSuffix}@example.test`,
   });
@@ -1330,7 +1484,7 @@ test("rotação de token gera novo identificador seguro, invalida o antigo e pre
   assert.equal(viewWithNewToken.publicId, rotation.newToken);
   assert.equal(viewWithNewToken.brideName, "Helena");
 
-  const identifiedWithNewToken = await registerOrIdentifyGuest(rotation.newToken, {
+  const identifiedWithNewToken = await registerTestGuest(rotation.newToken, {
     name: "Convidado Rotação",
     email: `rotacao-${testSuffix}@example.test`,
     guestToken: guest.guest.token,
@@ -1353,7 +1507,7 @@ test("isolamento estrito entre casamentos impede que convidados acessem ou envie
 
   // Convidado A tenta enviar foto para missão A usando token do evento B
   await assert.rejects(
-    () => uploadMissionPhoto({
+    () => uploadMissionPhotoWithLegal({
       eventIdentifier: eventBToken,
       guestToken: guestAToken,
       missionId: missionAId,
@@ -1515,4 +1669,236 @@ test("exclusao de casamento exige senha e preserva o livro caixa", async () => {
   assert.equal(result.deleted, true);
   assert.equal(await prisma.wedding.findUnique({ where: { id: wedding.id } }), null);
   assert.equal((await prisma.creditLedgerEntry.findUniqueOrThrow({ where: { id: entry.id } })).weddingId, null);
+});
+
+test("checkout registra o preço do servidor e só concede créditos após confirmação autenticada", async () => {
+  const customer = await registerAdminUser({
+    ...testRegistrationLegal,
+    name: "Cliente do checkout",
+    email: `checkout-${crypto.randomUUID()}@example.test`,
+    password: "senha-checkout-segura-123",
+  });
+  const membership = await prisma.organizationMembership.findFirstOrThrow({
+    where: { userId: customer.user.id },
+    select: { organizationId: true },
+  });
+  const creditPackage = await prisma.creditPackage.create({
+    data: { slug: `checkout-package-${crypto.randomUUID()}`, name: "3 créditos checkout", credits: 3, priceCents: 42_000 },
+  });
+  let preferenceInput: MercadoPagoPreferenceInput | null = null;
+  let payment: MercadoPagoPayment = {
+    id: "payment-test-1",
+    status: "pending",
+    externalReference: "",
+    preferenceId: "preference-test-1",
+    transactionAmountCents: 42_000,
+    currency: "BRL",
+  };
+  const gateway: MercadoPagoGateway = {
+    async createPreference(input) {
+      preferenceInput = input;
+      payment = { ...payment, externalReference: input.externalReference };
+      return { id: "preference-test-1", checkoutUrl: "https://sandbox.mercadopago.com.br/checkout/test" };
+    },
+    async getPayment() { return payment; },
+  };
+
+  try {
+    const checkout = await createMercadoPagoCheckout({
+      user: { id: customer.user.id, email: customer.user.email },
+      selection: { kind: "credit-package", packageId: creditPackage.id },
+      checkoutRequestId: crypto.randomUUID(),
+      commercialTermsVersion: currentLegalVersions.commercialTerms,
+      acceptedCommercialTerms: true,
+      clientAcceptedAt: new Date().toISOString(),
+    }, gateway);
+    assert.equal(checkout.checkoutUrl, "https://sandbox.mercadopago.com.br/checkout/test");
+    assert.equal((preferenceInput as MercadoPagoPreferenceInput | null)?.priceCents, 42_000);
+    assert.equal((await prisma.organizationCreditBalance.findUnique({ where: { organizationId: membership.organizationId } }))?.balance ?? 0, 0);
+
+    const pendingResult = await receiveMercadoPagoWebhook({
+      providerPaymentId: payment.id,
+      notificationType: "payment",
+      action: "payment.updated",
+      deliveryKey: `pending-${crypto.randomUUID()}`,
+      payload: { data: { id: payment.id } },
+    }, gateway);
+    assert.equal(pendingResult.fulfilled, false);
+    assert.equal((await prisma.organizationCreditBalance.findUnique({ where: { organizationId: membership.organizationId } }))?.balance ?? 0, 0);
+
+    payment = { ...payment, status: "approved" };
+    const approvedDeliveryKey = `approved-${crypto.randomUUID()}`;
+    const approvedResult = await receiveMercadoPagoWebhook({
+      providerPaymentId: payment.id,
+      notificationType: "payment",
+      action: "payment.updated",
+      deliveryKey: approvedDeliveryKey,
+      payload: { data: { id: payment.id } },
+    }, gateway);
+    assert.equal(approvedResult.fulfilled, true);
+    assert.equal((await prisma.organizationCreditBalance.findUniqueOrThrow({ where: { organizationId: membership.organizationId } })).balance, 3);
+    const duplicateResult = await receiveMercadoPagoWebhook({
+      providerPaymentId: payment.id,
+      notificationType: "payment",
+      action: "payment.updated",
+      deliveryKey: approvedDeliveryKey,
+      payload: { data: { id: payment.id } },
+    }, gateway);
+    assert.equal(duplicateResult.deliveryCreated, false);
+    assert.equal(duplicateResult.duplicate, true);
+    assert.equal((await prisma.organizationCreditBalance.findUniqueOrThrow({ where: { organizationId: membership.organizationId } })).balance, 3);
+  } finally {
+    await prisma.organization.delete({ where: { id: membership.organizationId } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: customer.user.id } }).catch(() => undefined);
+    await prisma.creditPackage.delete({ where: { id: creditPackage.id } }).catch(() => undefined);
+  }
+});
+
+test("assinatura do webhook do Mercado Pago usa comparação HMAC segura", () => {
+  const secret = "segredo-de-teste";
+  const dataId = "PAYMENT-123";
+  const requestId = "request-456";
+  const timestamp = "1750000000";
+  const manifest = `id:${dataId.toLowerCase()};request-id:${requestId};ts:${timestamp};`;
+  const hash = createHmac("sha256", secret).update(manifest).digest("hex");
+  assert.equal(verifyMercadoPagoSignature({ signatureHeader: `ts=${timestamp},v1=${hash}`, requestId, dataId, secret }), true);
+  assert.equal(verifyMercadoPagoSignature({ signatureHeader: `ts=${timestamp},v1=${"0".repeat(64)}`, requestId, dataId, secret }), false);
+});
+
+test("webhook rejected payment is recorded without granting credits", async () => {
+  const customer = await registerAdminUser({
+    ...testRegistrationLegal,
+    name: "Rejected checkout customer",
+    email: `checkout-rejected-${crypto.randomUUID()}@example.test`,
+    password: "senha-checkout-segura-123",
+  });
+  const membership = await prisma.organizationMembership.findFirstOrThrow({
+    where: { userId: customer.user.id },
+    select: { organizationId: true },
+  });
+  const creditPackage = await prisma.creditPackage.create({
+    data: { slug: `checkout-rejected-${crypto.randomUUID()}`, name: "Rejected credits", credits: 4, priceCents: 48_000 },
+  });
+  let payment: MercadoPagoPayment = {
+    id: `payment-rejected-${crypto.randomUUID()}`,
+    status: "rejected",
+    externalReference: "",
+    preferenceId: "preference-rejected",
+    transactionAmountCents: 48_000,
+    currency: "BRL",
+  };
+  const gateway: MercadoPagoGateway = {
+    async createPreference(input) {
+      payment = { ...payment, externalReference: input.externalReference };
+      return { id: "preference-rejected", checkoutUrl: "https://sandbox.mercadopago.com.br/checkout/rejected" };
+    },
+    async getPayment() { return payment; },
+  };
+
+  try {
+    await createMercadoPagoCheckout({
+      user: { id: customer.user.id, email: customer.user.email },
+      selection: { kind: "credit-package", packageId: creditPackage.id },
+      checkoutRequestId: crypto.randomUUID(),
+      commercialTermsVersion: currentLegalVersions.commercialTerms,
+      acceptedCommercialTerms: true,
+      clientAcceptedAt: new Date().toISOString(),
+    }, gateway);
+    const result = await receiveMercadoPagoWebhook({
+      providerPaymentId: payment.id,
+      notificationType: "payment",
+      action: "payment.updated",
+      deliveryKey: `rejected-${crypto.randomUUID()}`,
+      payload: { data: { id: payment.id } },
+    }, gateway);
+    assert.equal(result.fulfilled, false);
+    assert.equal((await prisma.organizationCreditBalance.findUnique({ where: { organizationId: membership.organizationId } }))?.balance ?? 0, 0);
+    assert.equal((await prisma.paymentAttempt.findUniqueOrThrow({ where: { externalReference: payment.externalReference } })).status, "REJECTED");
+  } finally {
+    await prisma.paymentWebhookEvent.deleteMany({ where: { providerPaymentId: payment.id } }).catch(() => undefined);
+    await prisma.organization.delete({ where: { id: membership.organizationId } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: customer.user.id } }).catch(() => undefined);
+    await prisma.creditPackage.delete({ where: { id: creditPackage.id } }).catch(() => undefined);
+  }
+});
+
+test("webhook communication failure is audited and can be reprocessed once", async () => {
+  const customer = await registerAdminUser({
+    ...testRegistrationLegal,
+    name: "Retry checkout customer",
+    email: `checkout-retry-${crypto.randomUUID()}@example.test`,
+    password: "senha-checkout-segura-123",
+  });
+  const membership = await prisma.organizationMembership.findFirstOrThrow({
+    where: { userId: customer.user.id },
+    select: { organizationId: true },
+  });
+  const creditPackage = await prisma.creditPackage.create({
+    data: { slug: `checkout-retry-${crypto.randomUUID()}`, name: "Retry credits", credits: 5, priceCents: 55_000 },
+  });
+  let shouldFail = false;
+  let payment: MercadoPagoPayment = {
+    id: `payment-retry-${crypto.randomUUID()}`,
+    status: "approved",
+    externalReference: "",
+    preferenceId: "preference-retry",
+    transactionAmountCents: 55_000,
+    currency: "BRL",
+  };
+  const gateway: MercadoPagoGateway = {
+    async createPreference(input) {
+      payment = { ...payment, externalReference: input.externalReference };
+      return { id: "preference-retry", checkoutUrl: "https://sandbox.mercadopago.com.br/checkout/retry" };
+    },
+    async getPayment() {
+      if (shouldFail) throw new DomainError("PAYMENT_PROVIDER_UNAVAILABLE", 502, "Payment provider unavailable.");
+      return payment;
+    },
+  };
+  let eventId = "";
+
+  try {
+    await createMercadoPagoCheckout({
+      user: { id: customer.user.id, email: customer.user.email },
+      selection: { kind: "credit-package", packageId: creditPackage.id },
+      checkoutRequestId: crypto.randomUUID(),
+      commercialTermsVersion: currentLegalVersions.commercialTerms,
+      acceptedCommercialTerms: true,
+      clientAcceptedAt: new Date().toISOString(),
+    }, gateway);
+    shouldFail = true;
+    const deliveryKey = `retry-${crypto.randomUUID()}`;
+    await assert.rejects(
+      receiveMercadoPagoWebhook({
+        providerPaymentId: payment.id,
+        notificationType: "payment",
+        action: "payment.updated",
+        deliveryKey,
+        payload: { data: { id: payment.id } },
+      }, gateway),
+      { code: "PAYMENT_PROVIDER_UNAVAILABLE" },
+    );
+    const failedEvent = await prisma.paymentWebhookEvent.findUniqueOrThrow({ where: { deliveryKey } });
+    eventId = failedEvent.id;
+    assert.equal(failedEvent.status, "FAILED");
+    assert.equal(failedEvent.lastErrorCode, "PAYMENT_PROVIDER_UNAVAILABLE");
+    assert.notEqual(failedEvent.nextRetryAt, null);
+    assert.equal(await prisma.paymentProcessingAttempt.count({ where: { webhookEventId: eventId, status: "FAILED" } }), 1);
+    assert.equal((await prisma.organizationCreditBalance.findUnique({ where: { organizationId: membership.organizationId } }))?.balance ?? 0, 0);
+
+    shouldFail = false;
+    const retried = await reprocessMercadoPagoWebhookEvent(eventId, gateway);
+    assert.equal(retried.fulfilled, true);
+    assert.equal((await prisma.organizationCreditBalance.findUniqueOrThrow({ where: { organizationId: membership.organizationId } })).balance, 5);
+    assert.equal(await prisma.paymentProcessingAttempt.count({ where: { webhookEventId: eventId } }), 2);
+
+    const duplicateRetry = await reprocessMercadoPagoWebhookEvent(eventId, gateway);
+    assert.equal(duplicateRetry.duplicate, true);
+    assert.equal((await prisma.organizationCreditBalance.findUniqueOrThrow({ where: { organizationId: membership.organizationId } })).balance, 5);
+  } finally {
+    if (eventId) await prisma.paymentWebhookEvent.delete({ where: { id: eventId } }).catch(() => undefined);
+    await prisma.organization.delete({ where: { id: membership.organizationId } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: customer.user.id } }).catch(() => undefined);
+    await prisma.creditPackage.delete({ where: { id: creditPackage.id } }).catch(() => undefined);
+  }
 });

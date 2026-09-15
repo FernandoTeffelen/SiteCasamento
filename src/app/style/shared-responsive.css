@@ -492,6 +492,34 @@
   box-shadow: 0 6px 20px rgba(85, 42, 46, 0.04);
 }
 
+.account-commercial-status {
+  margin-bottom: 1.4rem;
+  padding-bottom: 1.4rem;
+  border-bottom: 1px solid #eedcd8;
+}
+
+.account-commercial-status > span {
+  color: #927578;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account-commercial-status > strong {
+  display: block;
+  margin-top: 0.35rem;
+  color: #2d181b;
+  font-size: 1.25rem;
+}
+
+.account-commercial-status > p {
+  margin: 0.45rem 0 0;
+  color: #6d4e52;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
 .subscription-plan-card {
   display: flex;
   gap: 1.25rem;
@@ -551,7 +579,31 @@
 
 .settings-back {
   margin-top: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1rem;
   text-align: center;
+}
+
+.settings-plan-action {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1.35rem;
+  padding: 0.7rem 1rem;
+  border-radius: 0.75rem;
+  background: #a95954;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.settings-plan-action:hover {
+  background: #914641;
 }
 
 /* Empty weddings box */
@@ -580,12 +632,12 @@
 }
 
 html {
-  overflow-x: hidden;
+  overflow-x: clip;
   -webkit-text-size-adjust: 100%;
 }
 
 body {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 img,
@@ -1312,4 +1364,3 @@ select {
     transition-duration: 0.01ms !important;
   }
 }
-

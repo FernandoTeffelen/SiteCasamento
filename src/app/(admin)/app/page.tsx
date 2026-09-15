@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireAdminSession, checkUserIsPayingOrActive } from "@/server/auth/admin-auth.service";
+import { getAdminDashboardAccess, requireAdminSession } from "@/server/auth/admin-auth.service";
 import { getAdminDashboardData } from "@/server/admin/admin-weddings.service";
 import { isDomainError } from "@/server/domain/error";
 import { AdminDashboardClient } from "./admin-dashboard-client";
@@ -18,9 +18,8 @@ export default async function AdminAppPage() {
     throw error;
   }
 
-  // Se não é pagante, redirecionar para planos — não pode acessar o admin
-  const isPaying = await checkUserIsPayingOrActive(user.id);
-  if (!isPaying) {
+  const access = await getAdminDashboardAccess(user.id);
+  if (!access.canAccessDashboard) {
     redirect("/planos?notice=subscription_required");
   }
 

@@ -1,7 +1,7 @@
 import { registerOrIdentifyGuest, toPublicGuestIdentity } from "@/server/guests/guest.service";
 import { toPublicWeddingResponse } from "@/server/events/wedding.service";
 import { assertContentLengthWithinLimit, jsonError, readJsonBody } from "@/server/http/api-response";
-import { assertRequestRateLimit } from "@/server/http/rate-limit";
+import { assertRequestRateLimit, getRequestClientIp } from "@/server/http/rate-limit";
 
 export async function POST(request: Request, { params }: { params: Promise<{ identifier: string }> }) {
   try {
@@ -14,6 +14,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ ide
       name: body.name,
       email: body.email,
       guestToken: body.guestToken,
+      acceptedTerms: body.acceptedTerms,
+      acknowledgedPrivacy: body.acknowledgedPrivacy,
+      termsVersion: body.termsVersion,
+      privacyVersion: body.privacyVersion,
+      evidence: {
+        ipAddress: getRequestClientIp(request),
+        userAgent: request.headers.get("user-agent"),
+        clientAcceptedAt: typeof body.clientAcceptedAt === "string" ? body.clientAcceptedAt : null,
+      },
     });
 
     return Response.json(

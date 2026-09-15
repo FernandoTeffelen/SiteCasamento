@@ -1,19 +1,38 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 
 type UserInfo = { name: string; email: string };
 type SubscriptionSummary = {
   creditsAvailable: number;
+  completedPurchases: number;
+  access: {
+    canAccessDashboard: boolean;
+    hasCommercialHistory: boolean;
+    hasActivePlan: boolean;
+  };
   plan: {
+    source: "SUBSCRIPTION" | "MANUAL";
+    name: string;
     organizationName: string;
+    status: string;
+    tier: string | null;
+    period: string | null;
     durationMonths: number;
     creditsPerMonth: number;
-    startDate: string;
-    endDate: string;
+    startDate: string | null;
+    endDate: string | null;
     lastCreditReleasedAt: string | null;
     nextCreditReleaseAt: string | null;
   } | null;
+};
+
+const planStatusLabels: Record<string, string> = {
+  ACTIVE: "Ativo",
+  PAST_DUE: "Pagamento pendente",
+  CANCELED: "Cancelado",
+  EXPIRED: "Encerrado",
 };
 
 function formatDate(date: string | null) {
@@ -34,6 +53,13 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const commercialStatus = subscription.access.hasActivePlan
+    ? "Plano ativo"
+    : subscription.creditsAvailable > 0
+      ? "Créditos disponíveis"
+      : subscription.access.hasCommercialHistory
+        ? "Sem plano ativo · painel mantido"
+        : "Pagamento ainda não realizado";
 
   function resetFeedback() {
     setSuccess(null);
@@ -88,9 +114,12 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
         </div>
 
         {/* Tabs */}
-        <div className="settings-tabs">
+        <div className="settings-tabs" role="tablist" aria-label="Configurações da conta">
           <button
             type="button"
+            role="tab"
+            aria-selected={tab === "profile"}
+            aria-controls="settings-profile-panel"
             className={`settings-tab ${tab === "profile" ? "active" : ""}`}
             onClick={() => { setTab("profile"); resetFeedback(); }}
           >
@@ -98,6 +127,9 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={tab === "password"}
+            aria-controls="settings-password-panel"
             className={`settings-tab ${tab === "password" ? "active" : ""}`}
             onClick={() => { setTab("password"); resetFeedback(); }}
           >
@@ -105,6 +137,9 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={tab === "subscription"}
+            aria-controls="settings-subscription-panel"
             className={`settings-tab ${tab === "subscription" ? "active" : ""}`}
             onClick={() => { setTab("subscription"); resetFeedback(); }}
           >
@@ -118,7 +153,7 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
 
         {/* Aba Perfil */}
         {tab === "profile" && (
-          <form className="settings-form" onSubmit={handleProfileSave}>
+          <form id="settings-profile-panel" role="tabpanel" className="settings-form" onSubmit={handleProfileSave}>
             <div className="form-group">
               <label htmlFor="s-name">Nome</label>
               <input
@@ -149,7 +184,7 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
 
         {/* Aba Senha */}
         {tab === "password" && (
-          <form className="settings-form" onSubmit={handlePasswordSave}>
+          <form id="settings-password-panel" role="tabpanel" className="settings-form" onSubmit={handlePasswordSave}>
             <div className="form-group">
               <label htmlFor="s-current">Senha Atual</label>
               <input
@@ -193,15 +228,30 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
 
         {/* Aba Assinatura */}
         {tab === "subscription" && (
-          <div className="settings-subscription-info">
+          <div id="settings-subscription-panel" role="tabpanel" className="settings-subscription-info">
+            <div className="account-commercial-status">
+              <span>Status da conta</span>
+              <strong>{commercialStatus}</strong>
+              <p>
+                {subscription.access.canAccessDashboard
+                  ? "Seu acesso aos casamentos e fotos é permanente. Os créditos são necessários somente para ativar novos casamentos."
+                  : "Escolha um plano ou pacote de créditos para liberar seu primeiro casamento e o painel."}
+              </p>
+              <dl className="subscription-details">
+                <div><dt>Créditos disponíveis</dt><dd>{subscription.creditsAvailable}</dd></div>
+                <div><dt>Compras avulsas concluídas</dt><dd>{subscription.completedPurchases}</dd></div>
+                <div><dt>Acesso ao painel</dt><dd>{subscription.access.canAccessDashboard ? "Liberado" : "Aguardando contratação"}</dd></div>
+              </dl>
+            </div>
             <div className="subscription-plan-card">
               <div className="plan-icon">💳</div>
               <div>
-                <strong>{subscription.plan ? "Acesso liberado" : "Sem acesso ativo"}</strong>
+                <strong>{subscription.plan ? subscription.plan.name : "Nenhum plano contratado"}</strong>
                 {subscription.plan ? (
                   <>
-                    <p>Seu acesso foi liberado para {subscription.plan.organizationName}.</p>
+                    <p>{subscription.plan.organizationName} · {planStatusLabels[subscription.plan.status] ?? subscription.plan.status}</p>
                     <dl className="subscription-details">
+                      <div><dt>Status do plano</dt><dd>{planStatusLabels[subscription.plan.status] ?? subscription.plan.status}</dd></div>
                       <div><dt>Período</dt><dd>{formatDate(subscription.plan.startDate)} até {formatDate(subscription.plan.endDate)}</dd></div>
                       <div><dt>Duração</dt><dd>{subscription.plan.durationMonths} mês(es)</dd></div>
                       <div><dt>Créditos por mês</dt><dd>{subscription.plan.creditsPerMonth}</dd></div>
@@ -210,16 +260,24 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
                     </dl>
                   </>
                 ) : (
-                  <p>Esta conta ainda não possui um plano de acesso liberado. Após a confirmação, os dados aparecerão aqui automaticamente.</p>
+                  <p>Você pode contratar uma assinatura ou usar somente créditos avulsos.</p>
                 )}
               </div>
             </div>
+            <Link href="/planos?notice=manage_plan" className="settings-plan-action">
+              {subscription.access.hasActivePlan ? "Comparar e alterar plano" : "Ver planos e comprar créditos"} →
+            </Link>
           </div>
         )}
 
         {/* Voltar */}
         <div className="settings-back">
-          <a href="/app" className="link-back-home">← Voltar ao Painel</a>
+          <Link href={subscription.access.canAccessDashboard ? "/app" : "/planos"} className="link-back-home">
+            ← {subscription.access.canAccessDashboard ? "Voltar ao Painel" : "Voltar aos Planos"}
+          </Link>
+          <form action="/api/admin/auth/logout" method="post">
+            <button type="submit" className="logout-button">Sair da conta</button>
+          </form>
         </div>
       </div>
     </div>

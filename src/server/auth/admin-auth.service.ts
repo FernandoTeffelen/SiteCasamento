@@ -1,11 +1,12 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { cookies } from "next/headers";
-import { AccountStatus, CustomerType, ManualAccessPlanStatus, OrganizationRole, PlatformRole } from "@/generated/prisma/client";
+import { AccountStatus, CustomerType, LegalAcceptanceContext, ManualAccessPlanStatus, OrganizationRole, PlatformRole, SubscriptionStatus } from "@/generated/prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { DomainError } from "@/server/domain/error";
 import { reconcileManualAccessPlansForOrganizations } from "@/server/billing/manual-access-plan.service";
 import { getDemoAdminPassword, getSessionDurationMs } from "@/server/config/runtime";
+import { recordLegalAcceptances, type LegalEvidence } from "@/server/legal/legal-acceptance.service";
 
 const scrypt = promisify(scryptCallback);
 export const ADMIN_SESSION_COOKIE = "sitecasamento_admin_session";
@@ -214,6 +215,11 @@ export async function registerAdminUser(input: {
   email: unknown;
   password: unknown;
   customerType?: unknown;
+  termsVersion: unknown;
+  privacyVersion: unknown;
+  acceptedTerms: unknown;
+  acknowledgedPrivacy: unknown;
+  evidence?: LegalEvidence;
 }) {
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (name.length < 2 || name.length > 80) {
@@ -223,55 +229,87 @@ export async function registerAdminUser(input: {
   const password = validatePassword(input.password);
   const customerType = normalizeCustomerType(input.customerType);
 
+  if (input.acceptedTerms !== true || input.acknowledgedPrivacy !== true) {
+    throw new DomainError("LEGAL_ACCEPTANCE_REQUIRED", 400, "Aceite os Termos de Uso e confirme a leitura da Política de Privacidade.");
+  }
+
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
     throw new DomainError("USER_EMAIL_EXISTS", 409, "Este e-mail já está cadastrado. Faça login.");
   }
 
   const passwordHash = await hashPassword(password);
-  const user = await prisma.user.create({
-    data: {
-      email,
-      name,
-      passwordHash,
-      passwordUpdatedAt: new Date(),
-      customerType,
-    },
-    select: { id: true, email: true, name: true, platformRole: true },
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + getSessionDurationMs());
+
+  return prisma.$transaction(async (transaction) => {
+    const user = await transaction.user.create({
+      data: { email, name, passwordHash, passwordUpdatedAt: new Date(), customerType },
+      select: { id: true, email: true, name: true, platformRole: true },
+    });
+    const organizationName = customerType === CustomerType.COUPLE ? `Casamento de ${name}` : `Cerimonial de ${name}`;
+    const organization = await transaction.organization.create({
+      data: { name: organizationName, creditBalance: { create: { balance: 0 } } },
+      select: { id: true },
+    });
+    await transaction.organizationMembership.create({
+      data: { organizationId: organization.id, userId: user.id, role: OrganizationRole.OWNER },
+    });
+    await recordLegalAcceptances([
+      {
+        type: "TERMS_OF_USE",
+        version: input.termsVersion,
+        accepted: input.acceptedTerms,
+        context: LegalAcceptanceContext.REGISTRATION,
+        userId: user.id,
+        organizationId: organization.id,
+        ...input.evidence,
+      },
+      {
+        type: "PRIVACY_POLICY",
+        version: input.privacyVersion,
+        accepted: input.acknowledgedPrivacy,
+        context: LegalAcceptanceContext.REGISTRATION,
+        userId: user.id,
+        organizationId: organization.id,
+        ...input.evidence,
+      },
+    ], transaction);
+    await transaction.adminSession.create({ data: { userId: user.id, tokenHash: tokenHash(token), expiresAt } });
+    return { token, expiresAt, user };
   });
-
-  const organizationName = customerType === CustomerType.COUPLE ? `Casamento de ${name}` : `Cerimonial de ${name}`;
-  const organization = await prisma.organization.create({
-    data: {
-      name: organizationName,
-      creditBalance: { create: { balance: 0 } },
-    },
-  });
-
-  await prisma.organizationMembership.create({
-    data: {
-      organizationId: organization.id,
-      userId: user.id,
-      role: OrganizationRole.OWNER,
-    },
-  });
-
-  const { token, expiresAt } = await createSession(user.id);
-
-  return { token, expiresAt, user };
 }
 
-export async function checkUserIsPayingOrActive(userId: string): Promise<boolean> {
+export type AdminDashboardAccess = {
+  canAccessDashboard: boolean;
+  hasCommercialHistory: boolean;
+  hasActivePlan: boolean;
+  creditsAvailable: number;
+};
+
+/**
+ * O painel pertence permanentemente ao cliente depois da primeira liberação
+ * comercial. Plano ou saldo determinam novas ativações; não apagam o acesso
+ * aos casamentos já criados.
+ */
+export async function getAdminDashboardAccess(userId: string): Promise<AdminDashboardAccess> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { email: true, accountStatus: true },
   });
 
-  if (!user || user.accountStatus !== AccountStatus.ACTIVE) return false;
+  if (!user || user.accountStatus !== AccountStatus.ACTIVE) {
+    return { canAccessDashboard: false, hasCommercialHistory: false, hasActivePlan: false, creditsAvailable: 0 };
+  }
 
   // O e-mail cerimonial@demo.test é sempre pagante/ativo para testes
   if (process.env.NODE_ENV !== "production" && user?.email === DEMO_ADMIN_EMAIL) {
-    return true;
+    return {
+      canAccessDashboard: true,
+      hasCommercialHistory: true,
+      hasActivePlan: true,
+      creditsAvailable: DEMO_CREDIT_BALANCE,
+    };
   }
 
   const memberships = await prisma.organizationMembership.findMany({
@@ -279,21 +317,19 @@ export async function checkUserIsPayingOrActive(userId: string): Promise<boolean
     select: { organizationId: true },
   });
 
-  if (!memberships.length) return false;
+  if (!memberships.length) {
+    return { canAccessDashboard: false, hasCommercialHistory: false, hasActivePlan: false, creditsAvailable: 0 };
+  }
   const orgIds = memberships.map((m) => m.organizationId);
   await reconcileManualAccessPlansForOrganizations(orgIds);
 
-  const [balances, subscriptions, weddings, manualPlans] = await Promise.all([
+  const [balances, activeSubscriptions, activeManualPlans, commercialHistory, weddings] = await Promise.all([
     prisma.organizationCreditBalance.findMany({
-      where: { organizationId: { in: orgIds }, balance: { gt: 0 } },
-    }),
-    prisma.organizationSubscription.findMany({
-      where: { organizationId: { in: orgIds }, status: { in: ["ACTIVE", "PAST_DUE"] } },
-    }),
-    prisma.wedding.findMany({
       where: { organizationId: { in: orgIds } },
-      select: { id: true },
-      take: 1,
+      select: { balance: true },
+    }),
+    prisma.organizationSubscription.count({
+      where: { organizationId: { in: orgIds }, status: { in: ["ACTIVE", "PAST_DUE"] } },
     }),
     prisma.manualAccessPlan.count({
       where: {
@@ -303,9 +339,31 @@ export async function checkUserIsPayingOrActive(userId: string): Promise<boolean
         endDate: { gte: new Date() },
       },
     }),
+    prisma.creditLedgerEntry.count({
+      where: {
+        organizationId: { in: orgIds },
+        delta: { gt: 0 },
+        type: { in: ["ONE_TIME_PURCHASE", "SUBSCRIPTION_CYCLE"] },
+      },
+    }),
+    prisma.wedding.count({ where: { organizationId: { in: orgIds } } }),
   ]);
 
-  return balances.length > 0 || subscriptions.length > 0 || weddings.length > 0 || manualPlans > 0;
+  const creditsAvailable = balances.reduce((total, balance) => total + balance.balance, 0);
+  const hasActivePlan = activeSubscriptions > 0 || activeManualPlans > 0;
+  const hasCommercialHistory = commercialHistory > 0 || weddings > 0;
+
+  return {
+    canAccessDashboard: hasActivePlan || creditsAvailable > 0 || hasCommercialHistory,
+    hasCommercialHistory,
+    hasActivePlan,
+    creditsAvailable,
+  };
+}
+
+/** @deprecated Use getAdminDashboardAccess para distinguir saldo, plano e histórico. */
+export async function checkUserIsPayingOrActive(userId: string): Promise<boolean> {
+  return (await getAdminDashboardAccess(userId)).canAccessDashboard;
 }
 
 /** Resumo seguro do acesso contratado para a própria conta, exibido em Configurações. */
@@ -315,25 +373,48 @@ export async function getAdminSubscriptionSummary(userId: string) {
     select: { organizationId: true },
   });
   const organizationIds = memberships.map((membership) => membership.organizationId);
-  if (!organizationIds.length) return { creditsAvailable: 0, plan: null };
+  if (!organizationIds.length) {
+    return {
+      creditsAvailable: 0,
+      plan: null,
+      completedPurchases: 0,
+      access: { canAccessDashboard: false, hasCommercialHistory: false, hasActivePlan: false },
+    };
+  }
 
   await reconcileManualAccessPlansForOrganizations(organizationIds);
-  const now = new Date();
-  const [balances, plan] = await Promise.all([
-    prisma.organizationCreditBalance.findMany({
-      where: { organizationId: { in: organizationIds } },
-      select: { balance: true },
+  const [access, automaticPlans, manualPlans, completedPurchases] = await Promise.all([
+    getAdminDashboardAccess(userId),
+    prisma.organizationSubscription.findMany({
+      where: {
+        organizationId: { in: organizationIds },
+        status: { not: SubscriptionStatus.PENDING },
+      },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      take: 10,
+      select: {
+        status: true,
+        tier: true,
+        period: true,
+        cycleMonths: true,
+        creditsPerCycle: true,
+        currentPeriodStart: true,
+        currentPeriodEnd: true,
+        organization: { select: { name: true } },
+        plan: { select: { name: true, creditsPerMonth: true } },
+      },
     }),
-    prisma.manualAccessPlan.findFirst({
+    prisma.manualAccessPlan.findMany({
       where: {
         customerId: userId,
         organizationId: { in: organizationIds },
-        status: ManualAccessPlanStatus.ACTIVE,
-        startDate: { lte: now },
-        endDate: { gte: now },
+        status: { not: ManualAccessPlanStatus.PENDING_PAYMENT },
+        lastCreditReleasedAt: { not: null },
       },
-      orderBy: { startDate: "desc" },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+      take: 10,
       select: {
+        status: true,
         durationMonths: true,
         creditsPerMonth: true,
         startDate: true,
@@ -343,19 +424,61 @@ export async function getAdminSubscriptionSummary(userId: string) {
         organization: { select: { name: true } },
       },
     }),
+    prisma.oneTimePurchase.count({
+      where: { organizationId: { in: organizationIds }, status: "COMPLETED" },
+    }),
   ]);
 
+  const automaticPlan = automaticPlans.find((candidate) => (
+    candidate.status === SubscriptionStatus.ACTIVE || candidate.status === SubscriptionStatus.PAST_DUE
+  )) ?? automaticPlans[0];
+  const manualPlan = manualPlans.find((candidate) => candidate.status === ManualAccessPlanStatus.ACTIVE) ?? manualPlans[0];
+  const useAutomaticPlan = Boolean(
+    automaticPlan
+    && (
+      automaticPlan.status === SubscriptionStatus.ACTIVE
+      || automaticPlan.status === SubscriptionStatus.PAST_DUE
+      || manualPlan?.status !== ManualAccessPlanStatus.ACTIVE
+    )
+  );
+
+  const plan = useAutomaticPlan && automaticPlan ? {
+    source: "SUBSCRIPTION" as const,
+    name: automaticPlan.plan.name,
+    organizationName: automaticPlan.organization.name,
+    status: automaticPlan.status,
+    tier: automaticPlan.tier,
+    period: automaticPlan.period,
+    durationMonths: automaticPlan.cycleMonths,
+    creditsPerMonth: automaticPlan.plan.creditsPerMonth,
+    startDate: automaticPlan.currentPeriodStart?.toISOString() ?? null,
+    endDate: automaticPlan.currentPeriodEnd?.toISOString() ?? null,
+    lastCreditReleasedAt: null,
+    nextCreditReleaseAt: null,
+  } : manualPlan ? {
+    source: "MANUAL" as const,
+    name: "Plano contratado",
+    organizationName: manualPlan.organization.name,
+    status: manualPlan.status,
+    tier: null,
+    period: null,
+    durationMonths: manualPlan.durationMonths,
+    creditsPerMonth: manualPlan.creditsPerMonth,
+    startDate: manualPlan.startDate.toISOString(),
+    endDate: manualPlan.endDate.toISOString(),
+    lastCreditReleasedAt: manualPlan.lastCreditReleasedAt?.toISOString() ?? null,
+    nextCreditReleaseAt: manualPlan.nextCreditReleaseAt?.toISOString() ?? null,
+  } : null;
+
   return {
-    creditsAvailable: balances.reduce((total, balance) => total + balance.balance, 0),
-    plan: plan ? {
-      organizationName: plan.organization.name,
-      durationMonths: plan.durationMonths,
-      creditsPerMonth: plan.creditsPerMonth,
-      startDate: plan.startDate.toISOString(),
-      endDate: plan.endDate.toISOString(),
-      lastCreditReleasedAt: plan.lastCreditReleasedAt?.toISOString() ?? null,
-      nextCreditReleaseAt: plan.nextCreditReleaseAt?.toISOString() ?? null,
-    } : null,
+    creditsAvailable: access.creditsAvailable,
+    completedPurchases,
+    access: {
+      canAccessDashboard: access.canAccessDashboard,
+      hasCommercialHistory: access.hasCommercialHistory,
+      hasActivePlan: access.hasActivePlan,
+    },
+    plan,
   };
 }
 

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import assert from "node:assert/strict";
 import { prisma } from "../src/server/db/prisma";
+import { currentLegalVersions } from "../src/lib/legal/legal-versions";
 
 const baseUrl = (process.env.SMOKE_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -73,10 +74,15 @@ function createPhotoForm(guestToken: string, uploadId: string) {
   form.set("guestToken", guestToken);
   form.set("uploadId", uploadId);
   form.set("photo", new Blob([bytes], { type: "image/jpeg" }), "smoke.jpg");
+  form.set("acceptedLegalDocuments", "true");
+  form.set("termsVersion", currentLegalVersions.termsOfUse);
+  form.set("privacyVersion", currentLegalVersions.privacyPolicy);
+  form.set("legalAcceptedAt", new Date().toISOString());
   return form;
 }
 
 let customerId = "";
+let organizationId = "";
 let weddingId = "";
 let publicId = "";
 
@@ -89,7 +95,16 @@ try {
   const registration = await request("/api/admin/auth/register", {
     method: "POST",
     cookies: customerCookies,
-    body: { name: `Cliente Smoke ${suffix}`, email: customerEmail, password: customerPassword, customerType: "CEREMONIALIST" },
+    body: {
+      name: `Cliente Smoke ${suffix}`,
+      email: customerEmail,
+      password: customerPassword,
+      customerType: "CEREMONIALIST",
+      acceptedTerms: true,
+      acknowledgedPrivacy: true,
+      termsVersion: currentLegalVersions.termsOfUse,
+      privacyVersion: currentLegalVersions.privacyPolicy,
+    },
   });
   check(registration.response.status === 200 && typeof registration.payload.user?.id === "string", "cadastro de cliente", registration.payload);
   customerId = registration.payload.user.id;
@@ -104,6 +119,19 @@ try {
   });
   check(login.response.status === 200 && login.payload.user.id === customerId, "login do cliente");
 
+  const checkoutPlan = await prisma.subscriptionPlan.findFirstOrThrow({ where: { active: true, priceCents: { not: null } }, select: { id: true } });
+  const commercialAcceptance = await request("/api/legal/checkout-acceptance", {
+    method: "POST",
+    cookies: customerCookies,
+    body: {
+      planId: checkoutPlan.id,
+      acceptedCommercialTerms: true,
+      commercialTermsVersion: currentLegalVersions.commercialTerms,
+      clientAcceptedAt: new Date().toISOString(),
+    },
+  });
+  check(commercialAcceptance.response.status === 201, "aceite comercial vinculado à oferta");
+
   const platformLogin = await request("/api/platform/auth/login", {
     method: "POST",
     cookies: platformCookies,
@@ -112,6 +140,7 @@ try {
   check(platformLogin.response.status === 200 && platformLogin.payload.user.platformRole === "PLATFORM_ADMIN", "login do administrador");
 
   const membership = await prisma.organizationMembership.findFirstOrThrow({ where: { userId: customerId }, select: { organizationId: true } });
+  organizationId = membership.organizationId;
   const planForm = new FormData();
   planForm.set("organizationId", membership.organizationId);
   planForm.set("durationMonths", "1");
@@ -156,7 +185,15 @@ try {
 
   const guestCreate = await request(`/api/events/${publicId}/guests`, {
     method: "POST",
-    body: { name: "Convidado Smoke", email: `guest-${suffix}@example.test` },
+    body: {
+      name: "Convidado Smoke",
+      email: `guest-${suffix}@example.test`,
+      acceptedTerms: true,
+      acknowledgedPrivacy: true,
+      termsVersion: currentLegalVersions.termsOfUse,
+      privacyVersion: currentLegalVersions.privacyPolicy,
+      clientAcceptedAt: new Date().toISOString(),
+    },
   });
   check(guestCreate.response.status === 201 && typeof guestCreate.payload.guest.token === "string", "cadastro do convidado");
   const guestToken = guestCreate.payload.guest.token as string;
@@ -192,7 +229,12 @@ try {
   const photoResponse = await request(`/api/admin/photos/${photo.id}`, { cookies: customerCookies });
   check(photoResponse.response.status === 200 && photoResponse.response.headers.get("content-type")?.startsWith("image/jpeg") === true, "acesso administrativo à foto");
 
-  await prisma.wedding.update({ where: { id: weddingId }, data: { publicAccessEndsAt: new Date(Date.now() - 1_000) } });
+  const expiredWindowEnd = new Date(Date.now() - 1_000);
+  const expiredWindowStart = new Date(expiredWindowEnd.getTime() - 1_000);
+  await prisma.wedding.update({
+    where: { id: weddingId },
+    data: { publicAccessStartsAt: expiredWindowStart, publicAccessEndsAt: expiredWindowEnd },
+  });
   const expired = await request(`/api/events/${publicId}`);
   check(expired.response.status === 403, "expiração do acesso público");
   await prisma.wedding.update({ where: { id: weddingId }, data: { publicAccessEndsAt: new Date(Date.now() + 86_400_000) } });
@@ -205,6 +247,12 @@ try {
 
   console.log(`SMOKE_OK ${checks.length} verificações`);
 } finally {
+  if (organizationId) {
+    await prisma.legalAcceptance.deleteMany({ where: { organizationId } });
+    await prisma.organization.deleteMany({
+      where: { id: organizationId, name: { startsWith: "Cerimonial de Cliente Smoke" } },
+    });
+  }
   if (customerId) {
     await prisma.user.deleteMany({ where: { id: customerId, email: customerEmail } });
   }

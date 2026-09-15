@@ -1,6 +1,6 @@
 import { DomainError } from "@/server/domain/error";
 import { assertContentLengthWithinLimit, jsonError } from "@/server/http/api-response";
-import { assertRateLimit, assertRequestRateLimit } from "@/server/http/rate-limit";
+import { assertRateLimit, assertRequestRateLimit, getRequestClientIp } from "@/server/http/rate-limit";
 import {
   deleteLegacyGuestSubmission,
   getMaximumUploadBytes,
@@ -46,6 +46,14 @@ export async function POST(
       missionId,
       clientUploadId: getTextValue(formData, "uploadId"),
       file: photo,
+      legal: {
+        accepted: getTextValue(formData, "acceptedLegalDocuments") === "true",
+        termsVersion: getTextValue(formData, "termsVersion"),
+        privacyVersion: getTextValue(formData, "privacyVersion"),
+        clientAcceptedAt: getTextValue(formData, "legalAcceptedAt"),
+        ipAddress: getRequestClientIp(request),
+        userAgent: request.headers.get("user-agent"),
+      },
     });
     return Response.json(result, { status: 201, headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {

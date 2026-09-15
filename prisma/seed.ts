@@ -4,14 +4,15 @@ import {
   CommercialAddOnKind,
   PrismaClient,
   SubmissionStatus,
-  SubscriptionPeriod,
-  SubscriptionTier,
   WeddingStatus,
   WeddingTemplateTier,
 } from "../src/generated/prisma/client";
 import { defaultWeddingVisualConfig } from "../src/lib/templates/wedding-visual-config";
 import { DEMO_ADMIN_EMAIL, DEMO_CREDIT_BALANCE, setAdminPassword } from "../src/server/auth/admin-auth.service";
+import { syncCommercialCatalog } from "../src/server/billing/commercial-catalog.sync";
 import { getDemoAdminPassword } from "../src/server/config/runtime";
+import { syncLegalDocuments } from "../src/server/legal/legal-acceptance.service";
+import { objectStorage } from "../src/server/storage/object-storage";
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -32,8 +33,23 @@ const sampleSlugs = ["ana-e-joao", "beatriz-e-rafael"];
 const sampleOrganizationPublicId = "org_demo_cerimonial_4f2h7k";
 const demoPublicAccessStartsAt = new Date(Date.now() - 24 * 60 * 60 * 1000);
 const demoPublicAccessEndsAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+const demoPhotoBytes = Uint8Array.from(Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+));
+const demoPhotoKeys = {
+  anaDancing: "demo/ana-e-joao/mariana/noivos-dancando.png",
+  anaFriendship: "demo/ana-e-joao/carlos/nova-amizade.png",
+  beatrizKiss: "demo/beatriz-e-rafael/fernanda/primeiro-beijo.png",
+  beatrizDanceFloor: "demo/beatriz-e-rafael/lucas/pista-animada.png",
+} as const;
+
+async function storeDemoPhoto(storageKey: string) {
+  await objectStorage.put({ storageKey, body: demoPhotoBytes, contentType: "image/png" });
+}
 
 async function seedAnaAndJoao(organizationId: string, templateId: string) {
+  await Promise.all([storeDemoPhoto(demoPhotoKeys.anaDancing), storeDemoPhoto(demoPhotoKeys.anaFriendship)]);
   const wedding = await prisma.wedding.create({
     data: {
       organizationId,
@@ -98,10 +114,10 @@ async function seedAnaAndJoao(organizationId: string, templateId: string) {
       scoreAwarded: dancing.points,
       photo: {
         create: {
-          storageKey: "demo/ana-e-joao/mariana/noivos-dancando.jpg",
-          originalName: "noivos-dancando.jpg",
-          contentType: "image/jpeg",
-          sizeBytes: 1_024_000,
+          storageKey: demoPhotoKeys.anaDancing,
+          originalName: "noivos-dancando.png",
+          contentType: "image/png",
+          sizeBytes: demoPhotoBytes.byteLength,
         },
       },
     },
@@ -117,10 +133,10 @@ async function seedAnaAndJoao(organizationId: string, templateId: string) {
       scoreAwarded: friendship.points,
       photo: {
         create: {
-          storageKey: "demo/ana-e-joao/carlos/nova-amizade.jpg",
-          originalName: "nova-amizade.jpg",
-          contentType: "image/jpeg",
-          sizeBytes: 980_000,
+          storageKey: demoPhotoKeys.anaFriendship,
+          originalName: "nova-amizade.png",
+          contentType: "image/png",
+          sizeBytes: demoPhotoBytes.byteLength,
         },
       },
     },
@@ -151,6 +167,7 @@ async function seedAnaAndJoao(organizationId: string, templateId: string) {
 }
 
 async function seedBeatrizAndRafael(organizationId: string, templateId: string) {
+  await Promise.all([storeDemoPhoto(demoPhotoKeys.beatrizKiss), storeDemoPhoto(demoPhotoKeys.beatrizDanceFloor)]);
   const wedding = await prisma.wedding.create({
     data: {
       organizationId,
@@ -213,10 +230,10 @@ async function seedBeatrizAndRafael(organizationId: string, templateId: string) 
       scoreAwarded: firstKiss.points,
       photo: {
         create: {
-          storageKey: "demo/beatriz-e-rafael/fernanda/primeiro-beijo.jpg",
-          originalName: "primeiro-beijo.jpg",
-          contentType: "image/jpeg",
-          sizeBytes: 1_140_000,
+          storageKey: demoPhotoKeys.beatrizKiss,
+          originalName: "primeiro-beijo.png",
+          contentType: "image/png",
+          sizeBytes: demoPhotoBytes.byteLength,
         },
       },
     },
@@ -232,10 +249,10 @@ async function seedBeatrizAndRafael(organizationId: string, templateId: string) 
       scoreAwarded: danceFloor.points,
       photo: {
         create: {
-          storageKey: "demo/beatriz-e-rafael/lucas/pista-animada.jpg",
-          originalName: "pista-animada.jpg",
-          contentType: "image/jpeg",
-          sizeBytes: 1_075_000,
+          storageKey: demoPhotoKeys.beatrizDanceFloor,
+          originalName: "pista-animada.png",
+          contentType: "image/png",
+          sizeBytes: demoPhotoBytes.byteLength,
         },
       },
     },
@@ -361,43 +378,8 @@ async function main() {
     update: { active: true },
   });
 
-  const subscriptionTiers = [
-    { tier: SubscriptionTier.STARTER, name: "Starter", creditsPerMonth: 3 },
-    { tier: SubscriptionTier.PRO, name: "Pro", creditsPerMonth: 6 },
-    { tier: SubscriptionTier.AGENCY, name: "Agency", creditsPerMonth: 10 },
-  ];
-  const subscriptionPeriods = [
-    { period: SubscriptionPeriod.MONTHLY, name: "mensal", cycleMonths: 1 },
-    { period: SubscriptionPeriod.QUARTERLY, name: "trimestral", cycleMonths: 3 },
-    { period: SubscriptionPeriod.SEMIANNUAL, name: "semestral", cycleMonths: 6 },
-    { period: SubscriptionPeriod.ANNUAL, name: "anual", cycleMonths: 12 },
-  ];
-  await Promise.all(subscriptionTiers.flatMap((tier) => subscriptionPeriods.map((period) => (
-    prisma.subscriptionPlan.upsert({
-      where: { tier_period: { tier: tier.tier, period: period.period } },
-      create: {
-        slug: `${tier.tier.toLowerCase()}-${period.name}`,
-        name: `${tier.name} ${period.name}`,
-        tier: tier.tier,
-        period: period.period,
-        creditsPerMonth: tier.creditsPerMonth,
-        creditsPerCycle: tier.creditsPerMonth * period.cycleMonths,
-        cycleMonths: period.cycleMonths,
-      },
-      update: {
-        name: `${tier.name} ${period.name}`,
-        creditsPerMonth: tier.creditsPerMonth,
-        creditsPerCycle: tier.creditsPerMonth * period.cycleMonths,
-        cycleMonths: period.cycleMonths,
-        active: true,
-      },
-    })
-  ))));
-  await Promise.all([3, 6, 10].map((credits) => prisma.creditPackage.upsert({
-    where: { slug: `${credits}-creditos` },
-    create: { slug: `${credits}-creditos`, name: `${credits} créditos avulsos`, credits },
-    update: { name: `${credits} créditos avulsos`, credits, active: true },
-  })));
+  await syncCommercialCatalog(prisma);
+  await syncLegalDocuments(prisma);
   await Promise.all([
     prisma.commercialAddOn.upsert({
       where: { slug: "template-jardim-ao-entardecer" },
