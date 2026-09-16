@@ -9,7 +9,12 @@ export function jsonError(error: unknown) {
   // Erros completos podem conter detalhes do banco, caminhos locais ou segredos.
   // Eles ficam disponíveis apenas no log de desenvolvimento.
   if (process.env.NODE_ENV === "production") {
-    console.error("Unexpected API error");
+    const name = error instanceof Error ? error.name : typeof error;
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    const message = rawMessage
+      .replace(/postgres(?:ql)?:\/\/[^\s"']+/gi, "[database-url]")
+      .replace(/(password|senha)\s*[=:]\s*[^\s,;]+/gi, "$1=[redacted]");
+    console.error("Unexpected API error", { name, message });
   } else {
     console.error("Unexpected API error", error);
   }
