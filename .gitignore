@@ -60,6 +60,7 @@ Desktop.ini
 *.bak
 *.orig
 .eslintcache
+/image*.png
 
 # Sentry Config File
 .env.sentry-build-plugin

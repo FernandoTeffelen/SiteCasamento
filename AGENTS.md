@@ -16,6 +16,20 @@ casamentos por meio de um QR Code, sem instalação obrigatória.
 - A fila offline ficará em IndexedDB no navegador. O servidor nunca deve
   depender de Background Sync para concluir uploads.
 
+## Infraestrutura e deploy atuais
+
+- A aplicação Next.js e as Route Handlers são publicadas na Vercel.
+- O banco de produção é PostgreSQL no Neon.
+- As fotos de produção usam o bucket privado `sitecasamento-photos-test` no
+  Cloudflare R2, por meio do driver `s3-compatible`.
+- Em desenvolvimento, PostgreSQL e MinIO são iniciados pelo `compose.yaml`.
+- Cloudflare Workers não hospeda este projeto. O repositório está desconectado
+  do Worker `sitecasamento`; não recriar essa integração nem adicionar um
+  `wrangler.toml` sem uma decisão explícita de migrar o runtime.
+- A pasta `docs/` contém documentação operacional local e permanece ignorada
+  pelo Git. Explicações públicas e instruções essenciais devem ficar no
+  `README.md`.
+
 ## Prioridades e regras
 
 1. Confiabilidade, Safari/iPhone, experiência mobile e rede instável, nessa ordem.
