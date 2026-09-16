@@ -10,6 +10,7 @@ test-results/
 playwright-report/
 blob-report/
 *.tsbuildinfo
+next-env.d.ts
 .turbo/
 .vercel/
 .local-storage/
@@ -63,5 +64,5 @@ Desktop.ini
 # Sentry Config File
 .env.sentry-build-plugin
 
-# Documentos pessoais e operacionais locais; a documentação pública em docs/ é versionada.
-/docs
+# Documentos pessoais e operacionais locais; docs/ fica fora do repositório.
+/docs/
