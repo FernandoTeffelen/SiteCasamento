@@ -128,7 +128,7 @@ export function PlansConfigurator({
             <div><span>Produto</span><strong>{checkoutSelection.title}</strong><small>{checkoutSelection.subtitle}</small></div>
             <div><span>Créditos</span><strong>{checkoutSelection.credits} créditos</strong></div>
             <div><span>Valor total</span><strong>{formatPrice(checkoutSelection.priceCents, checkoutSelection.currency)}</strong></div>
-            <div><span>Renovação</span><strong>Não automática nesta versão</strong><small>O período contratado é pago integralmente.</small></div>
+            <div><span>Renovação</span><strong>{checkoutSelection.kind === "subscription" ? "Recorrente pelo Mercado Pago" : "Não automática"}</strong><small>{checkoutSelection.kind === "subscription" ? "A cobrança segue o ciclo escolhido e pode ser gerenciada no Mercado Pago." : "O período contratado é pago integralmente."}</small></div>
           </div>
           <div className="commercial-acceptance">
             {canRecordCommercialAcceptance ? (
