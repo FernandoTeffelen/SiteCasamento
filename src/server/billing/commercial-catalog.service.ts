@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { SubscriptionPeriod } from "@/generated/prisma/client";
 import type {
   CommercialBillingPeriod,
@@ -22,7 +23,7 @@ function calculateDiscountPercentage(monthlyPriceCents: number | undefined, tota
  * Retorna somente itens ativos e com preço definido. O PostgreSQL é a fonte
  * de verdade do catálogo exibido; o cliente nunca mantém uma cópia dos preços.
  */
-export async function getPublicCommercialCatalog(): Promise<CommercialCatalog> {
+async function readPublicCommercialCatalog(): Promise<CommercialCatalog> {
   const [subscriptionRows, packageRows, volumeTierRows] = await Promise.all([
     prisma.subscriptionPlan.findMany({
       where: { active: true, priceCents: { not: null } },
@@ -134,4 +135,16 @@ export async function getPublicCommercialCatalog(): Promise<CommercialCatalog> {
   }));
 
   return { periods, subscriptionPlans, creditPackages, creditVolumeTiers };
+}
+
+// O catalogo e publico e muda apenas por acao administrativa. Um cache curto
+// reduz leituras repetidas no Neon sem manter precos defasados por muito tempo.
+const getCachedPublicCommercialCatalog = unstable_cache(
+  readPublicCommercialCatalog,
+  ["public-commercial-catalog-v1"],
+  { revalidate: 60 },
+);
+
+export async function getPublicCommercialCatalog(): Promise<CommercialCatalog> {
+  return getCachedPublicCommercialCatalog();
 }

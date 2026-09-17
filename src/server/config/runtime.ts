@@ -84,8 +84,12 @@ export function getTrustedProxy() {
 }
 
 export function getDatabasePoolConfig() {
+  // Em producao, cada instancia serverless pode abrir seu proprio pool. Um
+  // limite menor evita esgotar conexoes no Neon durante picos de acesso.
+  const defaultPoolMax = process.env.NODE_ENV === "production" ? 2 : 10;
+
   return {
-    max: parsePositiveInteger(process.env.DATABASE_POOL_MAX, 10, 100),
+    max: parsePositiveInteger(process.env.DATABASE_POOL_MAX, defaultPoolMax, 100),
     connectionTimeoutMillis: parsePositiveInteger(process.env.DATABASE_CONNECTION_TIMEOUT_MS, 10_000, 120_000),
   };
 }

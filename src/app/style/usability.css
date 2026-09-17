@@ -34,6 +34,7 @@
 }
 .route-loading-screen h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.55rem, 7vw, 2rem); font-weight: 500; }
 .route-loading-screen p { max-width: 26rem; margin: 0; color: #76585c; line-height: 1.55; }
+.route-loading-spinner { width: 2.8rem; height: 2.8rem; margin: 0 auto .35rem; border: 3px solid #eadbd7; border-top-color: #a95954; border-radius: 50%; animation: loading-turn 1s linear infinite; }
 .route-loading-platform { background: #151a25; color: #f7f8fb; }
 .route-loading-platform .route-loading-mark { background: #243e39; color: #8bd5ca; }
 .route-loading-platform p { color: #b9c0cf; }
@@ -82,6 +83,9 @@
 .login-field input:focus { border-color: #a95954; box-shadow: 0 0 0 3px #a9595418; }
 .btn-login-submit { background: #a95954; box-shadow: none; }
 .btn-login-submit:hover { background: #914641; }
+.btn-login-submit:disabled { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; opacity: .78; }
+.btn-login-submit:disabled::before { width: .9rem; height: .9rem; border: 2px solid #ffffff80; border-top-color: #fff; border-radius: 50%; content: ""; animation: loading-turn .8s linear infinite; }
+.form-pending-status { margin: .9rem 0 0; color: #76585c; font-size: .875rem; line-height: 1.4; text-align: center; }
 @keyframes loading-turn { to { transform: rotate(360deg); } }
 @media (max-width: 47.99rem) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea { font-size: 16px; }
