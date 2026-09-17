@@ -1,6 +1,6 @@
 import { getMercadoPagoConfig } from "@/server/payments/mercado-pago.config";
 import { verifyMercadoPagoSignature } from "@/server/payments/mercado-pago-signature";
-import { createMercadoPagoWebhookDeliveryKey, receiveMercadoPagoWebhook } from "@/server/payments/payment-checkout.service";
+import { createMercadoPagoWebhookDeliveryKey, receiveMercadoPagoSubscriptionWebhook, receiveMercadoPagoWebhook } from "@/server/payments/payment-checkout.service";
 import { assertContentLengthWithinLimit, jsonError, readJsonBody } from "@/server/http/api-response";
 import { DomainError } from "@/server/domain/error";
 
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const url = new URL(request.url);
     const dataId = url.searchParams.get("data.id") ?? (bodyData?.id === undefined ? "" : String(bodyData.id));
     const notificationType = typeof body.type === "string" ? body.type : url.searchParams.get("type");
-    if (notificationType !== "payment") return Response.json({ received: true, ignored: true });
+    if (notificationType !== "payment" && notificationType !== "subscription_preapproval") return Response.json({ received: true, ignored: true });
     if (!dataId || dataId.length > 100) throw new DomainError("INVALID_WEBHOOK", 400, "Notificação inválida.");
 
     const config = getMercadoPagoConfig();
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     });
     if (!validSignature) throw new DomainError("INVALID_WEBHOOK_SIGNATURE", 401, "Assinatura da notificação inválida.");
 
-    const result = await receiveMercadoPagoWebhook({
+    const receipt = {
       providerPaymentId: dataId,
       notificationType,
       action: typeof body.action === "string" ? body.action : null,
@@ -39,7 +39,10 @@ export async function POST(request: Request) {
         action: typeof body.action === "string" ? body.action : null,
       }),
       payload: body as never,
-    });
+    };
+    const result = notificationType === "subscription_preapproval"
+      ? await receiveMercadoPagoSubscriptionWebhook(receipt)
+      : await receiveMercadoPagoWebhook(receipt);
     return Response.json({ received: true, ...result });
   } catch (error) {
     return jsonError(error);

@@ -86,11 +86,11 @@ export function PlansConfigurator({
         ? { kind: checkoutSelection.kind, packageId: checkoutSelection.packageId }
         : { kind: checkoutSelection.kind, quantity: checkoutSelection.quantity };
     try {
-      const response = await fetch("/api/payments/checkout", {
+      const response = await fetch(checkoutSelection.kind === "subscription" ? "/api/payments/subscription" : "/api/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          selection,
+          ...(checkoutSelection.kind === "subscription" ? { planId: checkoutSelection.planId } : { selection }),
           checkoutRequestId: checkoutRequestIdRef.current,
           commercialTermsVersion: currentLegalVersions.commercialTerms,
           acceptedCommercialTerms,
@@ -111,8 +111,9 @@ export function PlansConfigurator({
   }
 
   if (step === "payment" && checkoutSelection) {
+    // data-mp-subscriptions-page="without-plan-pending"
     return (
-      <section className="plan-payment-step" aria-labelledby="payment-step-title">
+      <section className="plan-payment-step" aria-labelledby="payment-step-title" {...(checkoutSelection.kind === "subscription" ? { "data-mp-subscriptions-page": "without-plan-pending" } : {})}>
         <div className="plan-stepper" aria-label="Etapas da compra">
           <span className="plan-step completed"><b>1</b> Escolha</span>
           <span className="plan-step completed"><b>2</b> Resumo</span>
@@ -140,10 +141,16 @@ export function PlansConfigurator({
           </div>
           <div className="payment-actions">
             {canRecordCommercialAcceptance ? (
-              <button type="button" className="btn-plan-continue" disabled={!acceptedCommercialTerms || isStartingCheckout || !paymentConfigured} onClick={() => void startCheckout()}>
-                {isStartingCheckout ? "Abrindo checkout…" : paymentConfigured ? "Pagar com Mercado Pago →" : "Checkout aguardando configuração"}
-              </button>
-            ) : <Link className="btn-plan-continue" href="/app/login">Entrar para continuar →</Link>}
+              checkoutSelection.kind === "subscription" ? (
+                <button type="button" id="mercado-pago-subscription-cta" className="btn-plan-continue" data-mp-subscription-cta="without-plan-pending" disabled={!acceptedCommercialTerms || isStartingCheckout || !paymentConfigured} onClick={() => void startCheckout()}>
+                  {isStartingCheckout ? "Abrindo checkout…" : paymentConfigured ? "Assinar com Mercado Pago →" : "Checkout aguardando configuração"}
+                </button>
+              ) : (
+                <button type="button" id="mercado-pago-checkout-cta" className="btn-plan-continue" data-mp-checkout-cta="checkout-pro" disabled={!acceptedCommercialTerms || isStartingCheckout || !paymentConfigured} onClick={() => void startCheckout()}>
+                  {isStartingCheckout ? "Abrindo checkout…" : paymentConfigured ? "Pagar com Mercado Pago →" : "Checkout aguardando configuração"}
+                </button>
+              ))
+            : <Link className="btn-plan-continue" href="/app/login">Entrar para continuar →</Link>}
             <button type="button" className="btn-plan-back" disabled={isStartingCheckout} onClick={() => setStep("configure")}>← Alterar minha escolha</button>
           </div>
           <p className="payment-safe-note">{paymentConfigured ? "Cartão e PIX são processados pelo Mercado Pago. O retorno do navegador, sozinho, não libera plano nem créditos." : "As credenciais de teste e a URL pública do webhook ainda precisam ser configuradas pelo proprietário."}</p>

@@ -6,6 +6,7 @@ import {
   PaymentProcessingTrigger,
   PaymentProductType,
   PaymentWebhookEventStatus,
+  SubscriptionStatus,
   Prisma,
 } from "@/generated/prisma/client";
 import {
@@ -199,6 +200,56 @@ export async function createMercadoPagoCheckout(
       data: { status: PaymentAttemptStatus.PENDING, providerPreferenceId: preference.id, checkoutUrl: preference.checkoutUrl, lastErrorCode: null, lastErrorMessage: null },
       select: { id: true, externalReference: true, checkoutUrl: true, providerPreferenceId: true },
     });
+  } catch (error) {
+    const details = errorDetails(error);
+    await prisma.paymentAttempt.update({ where: { id: checkout.id }, data: { status: PaymentAttemptStatus.ERROR, lastErrorCode: details.code, lastErrorMessage: details.message } }).catch(() => undefined);
+    throw error;
+  }
+}
+
+/** Cria uma assinatura recorrente no Mercado Pago. O provedor hospeda a coleta
+ * de cartao/PIX conforme a configuracao da conta; nenhum dado sensivel passa
+ * pela aplicacao. */
+export async function createMercadoPagoSubscriptionCheckout(
+  input: CreateCheckoutInput & { selection: Extract<CheckoutSelection, { kind: "subscription" }> },
+  gateway: MercadoPagoGateway = mercadoPagoGateway,
+) {
+  assertCheckoutRequestId(input.checkoutRequestId);
+  const membership = await prisma.organizationMembership.findFirst({ where: { userId: input.user.id }, orderBy: { createdAt: "asc" }, select: { organizationId: true } });
+  if (!membership) throw new DomainError("ORGANIZATION_REQUIRED", 409, "Sua conta ainda não possui uma organização.");
+
+  const existing = await prisma.paymentAttempt.findUnique({
+    where: { organizationId_idempotencyKey: { organizationId: membership.organizationId, idempotencyKey: input.checkoutRequestId } },
+    select: { id: true, externalReference: true, checkoutUrl: true, providerPreferenceId: true, subscription: { select: { providerSubscriptionId: true } } },
+  });
+  if (existing?.checkoutUrl && existing.subscription?.providerSubscriptionId) return existing;
+
+  const checkout = await prisma.$transaction(async (transaction) => {
+    const plan = await transaction.subscriptionPlan.findFirst({
+      where: { id: input.selection.planId, active: true },
+      select: { id: true, slug: true, name: true, tier: true, period: true, cycleMonths: true, creditsPerCycle: true, priceCents: true, currency: true },
+    });
+    if (!plan) throw new DomainError("PLAN_NOT_FOUND", 404, "O plano selecionado não está mais disponível.");
+    const priceCents = safePrice(plan.priceCents);
+    if (plan.currency !== "BRL") throw new DomainError("UNSUPPORTED_CURRENCY", 409, "O checkout inicial aceita somente valores em reais.");
+    const subscription = await transaction.organizationSubscription.create({
+      data: { organizationId: membership.organizationId, planId: plan.id, tier: plan.tier, period: plan.period, creditsPerCycle: plan.creditsPerCycle, cycleMonths: plan.cycleMonths, status: SubscriptionStatus.PENDING },
+      select: { id: true },
+    });
+    const attemptId = randomUUID();
+    const attempt = await transaction.paymentAttempt.create({
+      data: { id: attemptId, organizationId: membership.organizationId, userId: input.user.id, subscriptionId: subscription.id, productType: PaymentProductType.SUBSCRIPTION_PLAN, credits: plan.creditsPerCycle, priceCents, currency: plan.currency, externalReference: `subscription:${attemptId}`, idempotencyKey: input.checkoutRequestId },
+      select: { id: true, externalReference: true, priceCents: true, currency: true, subscriptionId: true },
+    });
+    await recordLegalAcceptance({ type: "COMMERCIAL_TERMS", version: input.commercialTermsVersion, accepted: input.acceptedCommercialTerms, context: LegalAcceptanceContext.CHECKOUT, userId: input.user.id, organizationId: membership.organizationId, contextReference: plan.id, contextSnapshot: { productType: PaymentProductType.SUBSCRIPTION_PLAN, planId: plan.id, slug: plan.slug, name: plan.name, tier: plan.tier, period: plan.period, cycleMonths: plan.cycleMonths, creditsPerCycle: plan.creditsPerCycle, priceCents, currency: plan.currency }, clientAcceptedAt: input.clientAcceptedAt, ipAddress: input.ipAddress, userAgent: input.userAgent }, transaction);
+    return { ...attempt, title: `${plan.name} — ${plan.cycleMonths} mês(es)`, frequency: plan.cycleMonths };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+  try {
+    if (!gateway.createSubscription) throw new DomainError("PAYMENT_PROVIDER_ERROR", 502, "O checkout recorrente ainda não está disponível.");
+    const subscription = await gateway.createSubscription({ externalReference: checkout.externalReference, reason: checkout.title, payerEmail: input.user.email, frequency: checkout.frequency, frequencyType: "months", transactionAmountCents: checkout.priceCents, currency: checkout.currency });
+    await prisma.organizationSubscription.update({ where: { id: checkout.subscriptionId ?? "" }, data: { providerSubscriptionId: subscription.id, status: SubscriptionStatus.PENDING } });
+    return prisma.paymentAttempt.update({ where: { id: checkout.id }, data: { status: PaymentAttemptStatus.PENDING, checkoutUrl: subscription.checkoutUrl, providerStatus: subscription.status, lastErrorCode: null, lastErrorMessage: null }, select: { id: true, externalReference: true, checkoutUrl: true } });
   } catch (error) {
     const details = errorDetails(error);
     await prisma.paymentAttempt.update({ where: { id: checkout.id }, data: { status: PaymentAttemptStatus.ERROR, lastErrorCode: details.code, lastErrorMessage: details.message } }).catch(() => undefined);
@@ -426,6 +477,34 @@ export async function receiveMercadoPagoWebhook(input: WebhookReceiptInput, gate
   const event = await createOrFindWebhookEvent(input);
   const result = await processMercadoPagoWebhookEvent(event.id, gateway, PaymentProcessingTrigger.WEBHOOK);
   return { eventId: event.id, deliveryCreated: event.created, ...result };
+}
+
+/** Atualiza o estado da assinatura apos notificacoes subscription_preapproval. */
+export async function receiveMercadoPagoSubscriptionWebhook(input: WebhookReceiptInput, gateway: MercadoPagoGateway = mercadoPagoGateway) {
+  const event = await createOrFindWebhookEvent(input);
+  if (!event.created || event.status === PaymentWebhookEventStatus.PROCESSED || event.status === PaymentWebhookEventStatus.IGNORED) return { eventId: event.id, deliveryCreated: event.created, duplicate: true };
+  try {
+    if (!gateway.getSubscription) throw new DomainError("PAYMENT_PROVIDER_ERROR", 502, "O webhook recorrente ainda não está disponível.");
+    const provider = await gateway.getSubscription(input.providerPaymentId);
+    const result = await withSerializableRetry(() => prisma.$transaction(async (transaction) => {
+      const attempt = await transaction.paymentAttempt.findFirst({ where: { subscription: { providerSubscriptionId: provider.id } }, select: { id: true, organizationId: true, subscriptionId: true } });
+      if (!attempt?.subscriptionId) {
+        await transaction.paymentWebhookEvent.update({ where: { id: event.id }, data: { status: PaymentWebhookEventStatus.IGNORED, processedAt: new Date() } });
+        return { ignored: true, status: provider.status };
+      }
+      const normalized = provider.status.toLowerCase();
+      const subscriptionStatus = normalized === "authorized" || normalized === "active" ? SubscriptionStatus.ACTIVE : normalized === "cancelled" || normalized === "canceled" ? SubscriptionStatus.CANCELED : normalized === "paused" ? SubscriptionStatus.PAST_DUE : SubscriptionStatus.PENDING;
+      if (subscriptionStatus === SubscriptionStatus.ACTIVE) await activateOrganizationSubscriptionInTransaction({ transaction, organizationId: attempt.organizationId, subscriptionId: attempt.subscriptionId });
+      else await transaction.organizationSubscription.update({ where: { id: attempt.subscriptionId }, data: { status: subscriptionStatus, canceledAt: subscriptionStatus === SubscriptionStatus.CANCELED ? new Date() : undefined } });
+      await transaction.paymentAttempt.update({ where: { id: attempt.id }, data: { status: subscriptionStatus === SubscriptionStatus.ACTIVE ? PaymentAttemptStatus.APPROVED : subscriptionStatus === SubscriptionStatus.CANCELED ? PaymentAttemptStatus.CANCELED : PaymentAttemptStatus.PENDING, providerStatus: provider.status, lastWebhookAt: new Date(), lastProcessedAt: new Date(), processedAt: subscriptionStatus === SubscriptionStatus.ACTIVE ? new Date() : undefined } });
+      await transaction.paymentWebhookEvent.update({ where: { id: event.id }, data: { paymentAttemptId: attempt.id, status: PaymentWebhookEventStatus.PROCESSED, processedAt: new Date() } });
+      return { ignored: false, status: provider.status };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+    return { eventId: event.id, deliveryCreated: event.created, ...result };
+  } catch (error) {
+    await recordWebhookProcessingFailure({ eventId: event.id, processingId: (await prisma.paymentProcessingAttempt.create({ data: { webhookEventId: event.id, trigger: PaymentProcessingTrigger.WEBHOOK }, select: { id: true } })).id, error }).catch(() => undefined);
+    throw error;
+  }
 }
 
 /** Reprocessamento explícito de uma entrega que falhou, sem confiar no payload antigo. */

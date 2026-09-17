@@ -4,7 +4,7 @@ type MercadoPagoConfig = {
   accessToken: string;
   webhookSecret: string;
   publicBaseUrl: string;
-  useSandboxCheckoutUrl: boolean;
+  isPublicHttpsUrl: boolean;
 };
 
 function configuredValue(name: string) {
@@ -14,7 +14,6 @@ function configuredValue(name: string) {
 export function isMercadoPagoConfigured() {
   return Boolean(
     configuredValue("MERCADO_PAGO_ACCESS_TOKEN")
-    && configuredValue("MERCADO_PAGO_WEBHOOK_SECRET")
     && configuredValue("MERCADO_PAGO_PUBLIC_BASE_URL"),
   );
 }
@@ -22,8 +21,8 @@ export function isMercadoPagoConfigured() {
 export function getMercadoPagoConfig(): MercadoPagoConfig {
   const accessToken = configuredValue("MERCADO_PAGO_ACCESS_TOKEN");
   const webhookSecret = configuredValue("MERCADO_PAGO_WEBHOOK_SECRET");
-  const rawPublicBaseUrl = configuredValue("MERCADO_PAGO_PUBLIC_BASE_URL");
-  if (!accessToken || !webhookSecret || !rawPublicBaseUrl) {
+  const rawPublicBaseUrl = configuredValue("MERCADO_PAGO_PUBLIC_BASE_URL") || configuredValue("APP_URL") || "http://localhost:3000";
+  if (!accessToken) {
     throw new DomainError(
       "MERCADO_PAGO_NOT_CONFIGURED",
       503,
@@ -37,17 +36,18 @@ export function getMercadoPagoConfig(): MercadoPagoConfig {
   } catch {
     throw new Error("MERCADO_PAGO_PUBLIC_BASE_URL is invalid.");
   }
-  if (publicBaseUrl.protocol !== "https:" || publicBaseUrl.pathname !== "/" || publicBaseUrl.search || publicBaseUrl.hash) {
-    throw new Error("MERCADO_PAGO_PUBLIC_BASE_URL must contain only a public HTTPS origin.");
+  if (publicBaseUrl.pathname !== "/" || publicBaseUrl.search || publicBaseUrl.hash) {
+    throw new Error("MERCADO_PAGO_PUBLIC_BASE_URL must contain only an origin.");
   }
-  if (["localhost", "127.0.0.1", "::1"].includes(publicBaseUrl.hostname)) {
-    throw new Error("MERCADO_PAGO_PUBLIC_BASE_URL cannot point to localhost.");
-  }
+  const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(publicBaseUrl.hostname);
+  const isPublicHttpsUrl = publicBaseUrl.protocol === "https:" && !isLocalhost;
+  if (!isLocalhost && !isPublicHttpsUrl) throw new Error("MERCADO_PAGO_PUBLIC_BASE_URL must use HTTPS outside local development.");
+  if (process.env.NODE_ENV === "production" && !isPublicHttpsUrl) throw new Error("MERCADO_PAGO_PUBLIC_BASE_URL must use a public HTTPS origin in production.");
 
   return {
     accessToken,
     webhookSecret,
     publicBaseUrl: publicBaseUrl.origin,
-    useSandboxCheckoutUrl: process.env.MERCADO_PAGO_USE_SANDBOX !== "false",
+    isPublicHttpsUrl,
   };
 }
