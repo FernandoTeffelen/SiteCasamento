@@ -581,9 +581,9 @@
   border-radius: 0.65rem;
   background: #f8ebe7;
   color: #af625b;
-  font-size: 1.35rem;
-  font-weight: 900;
 }
+
+.mission-icon svg { width: 1.15rem; height: 1.15rem; }
 
 .mission-card-completed .mission-icon {
   background: #e6f1e7;
@@ -764,7 +764,7 @@
   text-align: center;
 }
 
-.empty-photos > span {
+.empty-photos-icon {
   display: grid;
   width: 3rem;
   height: 3rem;
@@ -772,8 +772,10 @@
   place-items: center;
   border-radius: 1rem;
   background: #f8ebe7;
-  font-size: 1.3rem;
+  color: #af625b;
 }
+
+.empty-photos-icon svg { width: 1.35rem; height: 1.35rem; }
 
 .saved-photo-list {
   display: grid;

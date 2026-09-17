@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { WeddingQrCode } from "@/features/wedding/wedding-qr-code";
 import type { AdminDashboardWedding } from "@/server/admin/admin-weddings.service";
@@ -11,6 +11,32 @@ type DashboardData = {
   organization: { id: string; name: string; balance: number };
   weddings: AdminDashboardWedding[];
 };
+
+type DashboardIconName = "calendar" | "credits" | "guests" | "link" | "photos" | "refresh" | "rings" | "settings" | "trash";
+
+function DashboardIcon({ name }: { name: DashboardIconName }) {
+  const common = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 1.8,
+  };
+
+  const paths = {
+    calendar: <><rect x="3.5" y="5" width="17" height="15.5" rx="2" {...common} /><path d="M7.5 3.5v3M16.5 3.5v3M3.5 10h17" {...common} /></>,
+    credits: <><path d="M4 8.5 12 4l8 4.5v7L12 20l-8-4.5v-7Z" {...common} /><path d="m4 8.5 8 4.5 8-4.5M12 13v7" {...common} /></>,
+    guests: <><circle cx="9" cy="8" r="3" {...common} /><path d="M3.5 20c.7-3.2 2.6-5 5.5-5s4.8 1.8 5.5 5M16.5 5.5a3 3 0 0 1 0 5.8M17.5 15.3c1.7.6 2.7 2.1 3 4.2" {...common} /></>,
+    link: <><path d="M10.2 13.8a4.2 4.2 0 0 0 5.9.1l2-2a4.2 4.2 0 0 0-5.9-5.9l-1.1 1.1" {...common} /><path d="M13.8 10.2a4.2 4.2 0 0 0-5.9-.1l-2 2a4.2 4.2 0 1 0 5.9 5.9l1.1-1.1" {...common} /></>,
+    photos: <><rect x="3" y="6.5" width="18" height="13" rx="2" {...common} /><path d="M8 6.5 9.2 4.5h5.6L16 6.5M8 15l2.7-2.7 2.2 2.2 1.8-1.8 3.3 3.3M16.8 10.6h.01" {...common} /></>,
+    refresh: <><path d="M20 7.5V4l-1.8 1.8A8 8 0 1 0 20 14" {...common} /><path d="M20 4v3.5h-3.5" {...common} /></>,
+    rings: <><circle cx="9" cy="13" r="4.5" {...common} /><circle cx="15" cy="13" r="4.5" {...common} /><path d="m15 6 1.4-2 1.4 2L17.3 8h-1.8L15 6Z" {...common} /></>,
+    settings: <><circle cx="12" cy="12" r="3" {...common} /><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1-2.2 2.2-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.6v.2h-3v-.2a1.8 1.8 0 0 0-1.1-1.6 1.8 1.8 0 0 0-2 .4l-.1.1-2.2-2.2.1-.1a1.8 1.8 0 0 0 .4-2A1.8 1.8 0 0 0 5 13.9h-.2v-3H5a1.8 1.8 0 0 0 1.6-1.1 1.8 1.8 0 0 0-.4-2l-.1-.1 2.2-2.2.1.1a1.8 1.8 0 0 0 2 .4A1.8 1.8 0 0 0 11.5 4v-.2h3V4a1.8 1.8 0 0 0 1.1 1.6 1.8 1.8 0 0 0 2-.4l.1-.1 2.2 2.2-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.6 1.1h.2v3h-.2a1.8 1.8 0 0 0-1.5 1.5Z" {...common} /></>,
+    trash: <><path d="M4 7h16M9 7V4.5h6V7M6.5 7l.8 13h9.4l.8-13M10 11v5M14 11v5" {...common} /></>,
+  } satisfies Record<DashboardIconName, ReactNode>;
+
+  return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">{paths[name]}</svg>;
+}
 
 export function AdminDashboardClient({
   initialData,
@@ -220,7 +246,7 @@ export function AdminDashboardClient({
       <header className="admin-navbar">
         <div className="admin-nav-container">
           <div className="admin-brand">
-            <span className="admin-logo-badge">💍</span>
+            <span className="admin-logo-badge"><DashboardIcon name="rings" /></span>
             <div>
               <span className="admin-brand-name">SiteCasamento</span>
               <span className="admin-brand-sub">Painel da Cerimonialista</span>
@@ -234,11 +260,11 @@ export function AdminDashboardClient({
             </div>
 
             <div className="admin-user-menu">
-              <span className="user-greeting">
+              <span className="user-greeting" title={userEmail}>
                 Olá, <strong>{userName}</strong>
               </span>
               <Link href="/app/configuracoes" className="admin-settings-link" title="Configurações da conta">
-                ⚙️ Configurações
+                <DashboardIcon name="settings" /> Configurações
               </Link>
               <Link href="/planos?notice=manage_plan" className="admin-settings-link" title="Alterar plano ou comprar créditos">
                 Planos e créditos
@@ -256,8 +282,8 @@ export function AdminDashboardClient({
         {/* Banner de Boas-vindas */}
         <section className="admin-hero-banner">
           <div className="admin-hero-text">
-            <h1>Gestão de Casamentos e Experiências</h1>
-            <p>Acompanhe convidados, fotos enviadas e ranking em tempo real para cada um dos seus eventos.</p>
+            <h1>Seus casamentos</h1>
+            <p>Organize os links, convidados e fotos de cada evento em um só lugar.</p>
           </div>
           <div className="admin-hero-controls">
             {hasWeddings && canCreateWedding ? (
@@ -277,7 +303,7 @@ export function AdminDashboardClient({
               aria-busy={isRefreshing}
               title="Atualizar dados agora"
             >
-              🔄 {isRefreshing ? "Atualizando..." : "Atualizar"}
+              <DashboardIcon name="refresh" /> {isRefreshing ? "Atualizando..." : "Atualizar"}
             </button>
           </div>
         </section>
@@ -297,38 +323,31 @@ export function AdminDashboardClient({
         {/* Métricas Gerais */}
         <section className="admin-metrics-grid">
           <div className="metric-card">
-            <div className="metric-icon metric-purple">💒</div>
+            <div className="metric-icon metric-purple"><DashboardIcon name="rings" /></div>
             <div className="metric-info">
               <span className="metric-label">Casamentos</span>
               <span className="metric-value">{data.weddings.length}</span>
             </div>
           </div>
           <div className="metric-card">
-            <div className="metric-icon metric-purple">🎟️</div>
+            <div className="metric-icon metric-purple"><DashboardIcon name="credits" /></div>
             <div className="metric-info">
               <span className="metric-label">Créditos disponíveis</span>
               <span className="metric-value">{data.organization.balance}</span>
             </div>
           </div>
           <div className="metric-card">
-            <div className="metric-icon metric-blue">👥</div>
+            <div className="metric-icon metric-blue"><DashboardIcon name="guests" /></div>
             <div className="metric-info">
               <span className="metric-label">Convidados</span>
               <span className="metric-value">{totalGuests}</span>
             </div>
           </div>
           <div className="metric-card">
-            <div className="metric-icon metric-green">📸</div>
+            <div className="metric-icon metric-green"><DashboardIcon name="photos" /></div>
             <div className="metric-info">
               <span className="metric-label">Fotos Recebidas</span>
               <span className="metric-value">{totalPhotos}</span>
-            </div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-icon metric-amber">✉️</div>
-            <div className="metric-info">
-              <span className="metric-label">Conta</span>
-              <span className="metric-account-email">{userEmail}</span>
             </div>
           </div>
         </section>
@@ -336,13 +355,13 @@ export function AdminDashboardClient({
         {/* Lista de Casamentos */}
         <section className="weddings-section">
           <div className="section-title-row">
-            <h2>Casamentos Cadastrados ({data.weddings.length})</h2>
-            <span className="section-hint">Fotos e convidados são sincronizados a cada 15 segundos.</span>
+            <h2>Eventos</h2>
+            <span className="section-hint">{data.weddings.length} {data.weddings.length === 1 ? "casamento cadastrado" : "casamentos cadastrados"} · atualização automática a cada 15 segundos.</span>
           </div>
 
           {!hasWeddings ? (
             <div className="empty-weddings-box">
-              <span className="empty-icon">💍</span>
+              <span className="empty-icon"><DashboardIcon name="rings" /></span>
               <h3>Nenhum casamento criado ainda</h3>
               <p>{canCreateWedding
                 ? "Crie o seu primeiro evento para gerar o link do jogo."
@@ -370,7 +389,7 @@ export function AdminDashboardClient({
                         <span className="wedding-card-kicker">Casamento</span>
                         <h3 className="wedding-card-title">{wedding.name}</h3>
                         <p className="wedding-card-date">
-                          📅 {wedding.eventDate
+                          <DashboardIcon name="calendar" /> {wedding.eventDate
                             ? new Date(wedding.eventDate).toLocaleDateString("pt-BR")
                             : "Data a definir"}
                         </p>
@@ -394,14 +413,14 @@ export function AdminDashboardClient({
                           disabled={deletingId === wedding.id || isPending}
                           title="Excluir este casamento"
                         >
-                          {deletingId === wedding.id ? "Excluindo..." : "🗑️ Excluir"}
+                          {deletingId === wedding.id ? "Excluindo..." : <><DashboardIcon name="trash" /> Excluir</>}
                         </button>
                       </div>
                     </div>
 
                     {/* Link Seguro */}
                     <div className="wedding-link-box">
-                      <span className="link-box-label">🔗 Link Seguro do Convidado:</span>
+                      <span className="link-box-label"><DashboardIcon name="link" /> Link do convidado</span>
                       <div className="link-input-row">
                         <input
                           type="text"
@@ -474,7 +493,7 @@ export function AdminDashboardClient({
                     {/* Ranking */}
                     {wedding.topGuests.length > 0 && (
                       <div className="wedding-ranking-preview">
-                        <h4>🏆 Ranking dos Convidados</h4>
+                        <h4>Ranking dos convidados</h4>
                         <ul className="ranking-compact-list">
                           {wedding.topGuests.map((guest, idx) => (
                             <li key={guest.id} className="ranking-item">
@@ -499,7 +518,7 @@ export function AdminDashboardClient({
         <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
           <div className="modal-window" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="create-wedding-title">
             <div className="modal-header">
-              <h2 id="create-wedding-title">💍 Criar Novo Casamento</h2>
+              <h2 id="create-wedding-title">Criar casamento</h2>
               <button type="button" className="modal-close-btn" onClick={() => setShowCreateModal(false)} aria-label="Fechar">✕</button>
             </div>
             <form onSubmit={handleCreateWedding} className="modal-form">

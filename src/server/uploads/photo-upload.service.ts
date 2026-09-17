@@ -23,6 +23,25 @@ export type UploadPhotoFile = {
   arrayBuffer(): Promise<ArrayBuffer>;
 };
 
+type UploadLegalInput = {
+  accepted: unknown;
+  termsVersion: unknown;
+  privacyVersion: unknown;
+} & LegalEvidence;
+
+export type DirectPhotoUploadIntent =
+  | {
+    mode: "direct";
+    submission: { id: string; status: typeof SubmissionStatus.UPLOADING };
+    upload: { url: string; method: "PUT"; headers: Record<string, string>; expiresAt: string };
+  }
+  | {
+    mode: "completed";
+    submission: { id: string; status: typeof SubmissionStatus.UPLOADED };
+    score: number;
+  }
+  | { mode: "server" };
+
 export type UploadMissionPhotoInput = {
   eventIdentifier: string;
   guestToken: unknown;
@@ -30,11 +49,7 @@ export type UploadMissionPhotoInput = {
   clientUploadId: unknown;
   file: UploadPhotoFile;
   storage?: ObjectStorage;
-  legal: {
-    accepted: unknown;
-    termsVersion: unknown;
-    privacyVersion: unknown;
-  } & LegalEvidence;
+  legal: UploadLegalInput;
 };
 
 function validateGuestToken(guestToken: unknown) {
@@ -113,17 +128,22 @@ function isValidImageContent(contentType: string, bytes: Uint8Array) {
 
 function safeOriginalName(fileName: string | undefined, contentType: string) {
   const fallbackExtension = contentType.split("/")[1] ?? "image";
-  const sanitized = fileName?.normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+  const sanitized = typeof fileName === "string"
+    ? fileName.normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120)
+    : undefined;
   return sanitized && sanitized.length > 0 ? sanitized : `foto.${fallbackExtension}`;
 }
 
-async function validatePhotoFile(file: UploadPhotoFile) {
+function validatePhotoMetadata(file: { size: unknown; type: unknown; name?: unknown }) {
+  if (typeof file.type !== "string") {
+    throw new DomainError("UNSUPPORTED_PHOTO_FORMAT", 415, "Envie uma foto em JPEG, PNG, WebP ou HEIC.");
+  }
   const contentType = file.type.toLowerCase().trim();
   if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
     throw new DomainError("UNSUPPORTED_PHOTO_FORMAT", 415, "Envie uma foto em JPEG, PNG, WebP ou HEIC.");
   }
 
-  if (!Number.isSafeInteger(file.size) || file.size < 1) {
+  if (typeof file.size !== "number" || !Number.isSafeInteger(file.size) || file.size < 1) {
     throw new DomainError("INVALID_PHOTO", 400, "A foto está vazia ou é inválida.");
   }
 
@@ -131,12 +151,17 @@ async function validatePhotoFile(file: UploadPhotoFile) {
     throw new DomainError("PHOTO_TOO_LARGE", 413, "A foto excede o tamanho máximo permitido de 15 MB.");
   }
 
+  return { contentType, originalName: safeOriginalName(typeof file.name === "string" ? file.name : undefined, contentType) };
+}
+
+async function validatePhotoFile(file: UploadPhotoFile) {
+  const metadata = validatePhotoMetadata(file);
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (bytes.byteLength !== file.size || !isValidImageContent(contentType, bytes)) {
+  if (bytes.byteLength !== file.size || !isValidImageContent(metadata.contentType, bytes)) {
     throw new DomainError("INVALID_PHOTO_CONTENT", 415, "O arquivo não corresponde a uma imagem válida.");
   }
 
-  return { bytes, contentType, originalName: safeOriginalName(file.name, contentType) };
+  return { bytes, ...metadata };
 }
 
 function shouldRetryTransaction(error: unknown) {
@@ -171,6 +196,7 @@ async function prepareSubmission(input: {
   guestId: string;
   missionId: string;
   clientUploadId: string;
+  reuseUploading?: boolean;
 }) : Promise<PreparedSubmission> {
   return withTransactionRetry(() => prisma.$transaction(async (transaction) => {
     const mission = await transaction.mission.findFirst({
@@ -190,6 +216,7 @@ async function prepareSubmission(input: {
       }
       if (existing.status === SubmissionStatus.UPLOADED) return { id: existing.id, alreadyUploaded: true };
       if (existing.status === SubmissionStatus.UPLOADING) {
+        if (input.reuseUploading) return { id: existing.id, alreadyUploaded: false };
         throw new DomainError("UPLOAD_IN_PROGRESS", 409, "Esta foto já está sendo enviada.");
       }
 
@@ -356,6 +383,194 @@ async function finalizeSubmission(input: {
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }
 
+async function getUploadedResult(input: { organizationId: string; weddingId: string; guestId: string; submissionId: string }) {
+  const score = await prisma.scoreEntry.aggregate({
+    where: { organizationId: input.organizationId, weddingId: input.weddingId, guestId: input.guestId },
+    _sum: { points: true },
+  });
+  return {
+    submission: { id: input.submissionId, status: SubmissionStatus.UPLOADED },
+    awardedNow: false,
+    score: score._sum.points ?? 0,
+    alreadyUploaded: true,
+  };
+}
+
+async function recordPhotoLegalAcceptance(input: {
+  legal: UploadLegalInput;
+  clientUploadId: string;
+  guestId: string;
+  organizationId: string;
+}) {
+  await recordLegalAcceptances([
+    {
+      ...input.legal,
+      type: "TERMS_OF_USE",
+      version: input.legal.termsVersion,
+      accepted: input.legal.accepted,
+      context: LegalAcceptanceContext.PHOTO_SUBMISSION,
+      guestId: input.guestId,
+      organizationId: input.organizationId,
+      contextReference: input.clientUploadId,
+    },
+    {
+      ...input.legal,
+      type: "PRIVACY_POLICY",
+      version: input.legal.privacyVersion,
+      accepted: input.legal.accepted,
+      context: LegalAcceptanceContext.PHOTO_SUBMISSION,
+      guestId: input.guestId,
+      organizationId: input.organizationId,
+      contextReference: input.clientUploadId,
+    },
+  ]);
+}
+
+/**
+ * Autoriza um upload curto, limitado à chave privada daquele envio. O arquivo
+ * continua sem efeito no banco até `finalizeMissionPhotoDirectUpload` lê-lo e
+ * validar seu conteúdo no servidor.
+ */
+export async function createMissionPhotoUploadIntent(input: {
+  eventIdentifier: string;
+  guestToken: unknown;
+  missionId: unknown;
+  clientUploadId: unknown;
+  file: { size: unknown; type: unknown; name?: unknown };
+  legal: UploadLegalInput;
+  storage?: ObjectStorage;
+}): Promise<DirectPhotoUploadIntent> {
+  const guestToken = validateGuestToken(input.guestToken);
+  const missionId = validateMissionId(input.missionId);
+  const clientUploadId = validateClientUploadId(input.clientUploadId);
+  const metadata = validatePhotoMetadata(input.file);
+  const storage = input.storage ?? objectStorage;
+
+  if (!storage.createPresignedUpload) return { mode: "server" };
+
+  const { wedding, guest } = await getGuestContext(input.eventIdentifier, guestToken);
+  await recordPhotoLegalAcceptance({
+    legal: input.legal,
+    clientUploadId,
+    guestId: guest.id,
+    organizationId: wedding.organizationId,
+  });
+  const prepared = await prepareSubmission({
+    organizationId: wedding.organizationId,
+    weddingId: wedding.id,
+    guestId: guest.id,
+    missionId,
+    clientUploadId,
+    reuseUploading: true,
+  });
+
+  if (prepared.alreadyUploaded) {
+    const completed = await getUploadedResult({
+      organizationId: wedding.organizationId,
+      weddingId: wedding.id,
+      guestId: guest.id,
+      submissionId: prepared.id,
+    });
+    return { mode: "completed", submission: completed.submission, score: completed.score };
+  }
+
+  try {
+    const upload = await storage.createPresignedUpload({
+      storageKey: buildStorageKey(wedding.id, guest.id, missionId, prepared.id),
+      contentType: metadata.contentType,
+      expiresInSeconds: 10 * 60,
+    });
+    return { mode: "direct", submission: { id: prepared.id, status: SubmissionStatus.UPLOADING }, upload };
+  } catch {
+    await markUploadFailed(prepared.id);
+    throw new DomainError("UPLOAD_SIGNING_FAILED", 503, "Não foi possível preparar o envio da foto agora. Tente novamente.");
+  }
+}
+
+/** Confirma um upload direto somente após validar os bytes privados no storage. */
+export async function finalizeMissionPhotoDirectUpload(input: {
+  eventIdentifier: string;
+  guestToken: unknown;
+  missionId: unknown;
+  clientUploadId: unknown;
+  originalName: unknown;
+  storage?: ObjectStorage;
+}) {
+  const guestToken = validateGuestToken(input.guestToken);
+  const missionId = validateMissionId(input.missionId);
+  const clientUploadId = validateClientUploadId(input.clientUploadId);
+  const { wedding, guest } = await getGuestContext(input.eventIdentifier, guestToken);
+  const submission = await prisma.submission.findFirst({
+    where: {
+      organizationId: wedding.organizationId,
+      weddingId: wedding.id,
+      guestId: guest.id,
+      missionId,
+      clientUploadId,
+    },
+    select: { id: true, status: true },
+  });
+  if (!submission) throw new DomainError("SUBMISSION_NOT_FOUND", 404, "Envio não encontrado neste casamento.");
+  if (submission.status === SubmissionStatus.UPLOADED) {
+    return getUploadedResult({
+      organizationId: wedding.organizationId,
+      weddingId: wedding.id,
+      guestId: guest.id,
+      submissionId: submission.id,
+    });
+  }
+  if (submission.status !== SubmissionStatus.UPLOADING) {
+    throw new DomainError("UPLOAD_NOT_READY", 409, "Prepare o envio da foto novamente antes de confirmar.");
+  }
+
+  const storage = input.storage ?? objectStorage;
+  const storageKey = buildStorageKey(wedding.id, guest.id, missionId, submission.id);
+  let stored: Awaited<ReturnType<ObjectStorage["get"]>>;
+  try {
+    stored = await storage.get(storageKey);
+  } catch {
+    await markUploadFailed(submission.id);
+    throw new DomainError("UPLOAD_STORAGE_FAILED", 503, "Não foi possível validar a foto agora. Tente novamente.");
+  }
+
+  let photo: Awaited<ReturnType<typeof validatePhotoFile>>;
+  try {
+    photo = await validatePhotoFile({
+      name: typeof input.originalName === "string" ? input.originalName : undefined,
+      size: stored.body.byteLength,
+      type: stored.contentType,
+      async arrayBuffer() { return stored.body.slice().buffer; },
+    });
+  } catch (error) {
+    await markUploadFailed(submission.id);
+    await storage.delete(storageKey).catch(() => undefined);
+    throw error;
+  }
+
+  try {
+    const finalized = await finalizeSubmission({
+      organizationId: wedding.organizationId,
+      weddingId: wedding.id,
+      guestId: guest.id,
+      missionId,
+      submissionId: submission.id,
+      contentType: photo.contentType,
+      originalName: photo.originalName,
+      sizeBytes: photo.bytes.byteLength,
+    });
+    return {
+      submission: { id: finalized.submissionId, status: SubmissionStatus.UPLOADED },
+      awardedNow: finalized.awardedNow,
+      score: finalized.score,
+      alreadyUploaded: finalized.alreadyUploaded,
+    };
+  } catch (error) {
+    await markUploadFailed(submission.id);
+    await storage.delete(storageKey).catch(() => undefined);
+    throw error;
+  }
+}
+
 /**
  * Recebe uma foto real, persiste no storage e só então concede pontos.
  * clientUploadId torna as tentativas seguras quando o navegador perde a resposta.
@@ -365,28 +580,12 @@ export async function uploadMissionPhoto(input: UploadMissionPhotoInput) {
   const missionId = validateMissionId(input.missionId);
   const clientUploadId = validateClientUploadId(input.clientUploadId);
   const { wedding, guest } = await getGuestContext(input.eventIdentifier, guestToken);
-  await recordLegalAcceptances([
-    {
-      ...input.legal,
-      type: "TERMS_OF_USE",
-      version: input.legal.termsVersion,
-      accepted: input.legal.accepted,
-      context: LegalAcceptanceContext.PHOTO_SUBMISSION,
-      guestId: guest.id,
-      organizationId: wedding.organizationId,
-      contextReference: clientUploadId,
-    },
-    {
-      ...input.legal,
-      type: "PRIVACY_POLICY",
-      version: input.legal.privacyVersion,
-      accepted: input.legal.accepted,
-      context: LegalAcceptanceContext.PHOTO_SUBMISSION,
-      guestId: guest.id,
-      organizationId: wedding.organizationId,
-      contextReference: clientUploadId,
-    },
-  ]);
+  await recordPhotoLegalAcceptance({
+    legal: input.legal,
+    clientUploadId,
+    guestId: guest.id,
+    organizationId: wedding.organizationId,
+  });
   // Resolve o evento e o convidado antes de ler os bytes completos do arquivo.
   const photo = await validatePhotoFile(input.file);
   const prepared = await prepareSubmission({
@@ -398,16 +597,12 @@ export async function uploadMissionPhoto(input: UploadMissionPhotoInput) {
   });
 
   if (prepared.alreadyUploaded) {
-    const score = await prisma.scoreEntry.aggregate({
-      where: { organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id },
-      _sum: { points: true },
+    return getUploadedResult({
+      organizationId: wedding.organizationId,
+      weddingId: wedding.id,
+      guestId: guest.id,
+      submissionId: prepared.id,
     });
-    return {
-      submission: { id: prepared.id, status: SubmissionStatus.UPLOADED },
-      awardedNow: false,
-      score: score._sum.points ?? 0,
-      alreadyUploaded: true,
-    };
   }
 
   const storageKey = buildStorageKey(wedding.id, guest.id, missionId, prepared.id);

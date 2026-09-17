@@ -71,6 +71,29 @@ Configure as variáveis de `.env.example` no ambiente da Vercel. Os valores prin
 
 Não coloque `.env`, tokens, senhas, chaves R2 ou credenciais de pagamento no Git. A pasta `docs/` contém anotações operacionais locais e permanece ignorada pelo Git.
 
+### Upload de fotos
+
+Com `STORAGE_DRIVER=s3-compatible`, o navegador solicita uma URL assinada curta (10 minutos) e envia o arquivo diretamente ao R2. A aplicação só registra a foto e a pontuação depois de buscar o objeto privado, validar MIME, tamanho e assinatura do arquivo. O envio local, e qualquer driver sem URLs assinadas, continua usando a rota compatível pela aplicação.
+
+No bucket privado `sitecasamento-photos-test`, mantenha a política CORS abaixo para o upload direto. Ela não torna fotos públicas e só permite `PUT` de produção e localhost com o `Content-Type` assinado:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://site-casamento-fernando.vercel.app",
+      "http://localhost:3000"
+    ],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+As URLs assinadas são limitadas a uma única chave privada por envio e expiram. A fila IndexedDB conserva o arquivo até a confirmação final; reenvios reutilizam o mesmo `uploadId`, sem duplicar foto nem pontos.
+
 ## Cache
 
 - Catálogo comercial: cache de 60 segundos; os preços continuam sendo validados no servidor no checkout.

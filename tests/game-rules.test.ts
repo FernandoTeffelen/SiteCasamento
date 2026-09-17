@@ -390,7 +390,7 @@ test("login administrativo usa senha com hash e sessão opaca revogável", async
   assert.equal(await getAdminSessionFromToken(session.token), null);
 });
 
-test("cliente mantém acesso ao painel depois de consumir uma compra avulsa", async () => {
+test("cliente acessa o painel antes e depois de consumir uma compra avulsa", async () => {
   const password = "senha-acesso-permanente-123";
   const customer = await registerAdminUser({
     ...testRegistrationLegal,
@@ -413,7 +413,7 @@ test("cliente mantém acesso ao painel depois de consumir uma compra avulsa", as
 
   try {
     assert.deepEqual(await getAdminDashboardAccess(customer.user.id), {
-      canAccessDashboard: false,
+      canAccessDashboard: true,
       hasCommercialHistory: false,
       hasActivePlan: false,
       creditsAvailable: 0,

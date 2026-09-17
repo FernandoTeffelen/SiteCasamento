@@ -233,9 +233,7 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
               <span>Status da conta</span>
               <strong>{commercialStatus}</strong>
               <p>
-                {subscription.access.canAccessDashboard
-                  ? "Seu acesso aos casamentos e fotos é permanente. Os créditos são necessários somente para ativar novos casamentos."
-                  : "Escolha um plano ou pacote de créditos para liberar seu primeiro casamento e o painel."}
+                Seu painel está disponível. Os créditos são necessários somente para criar novos casamentos.
               </p>
               <dl className="subscription-details">
                 <div><dt>Créditos disponíveis</dt><dd>{subscription.creditsAvailable}</dd></div>
@@ -272,8 +270,8 @@ export function AdminSettingsClient({ user, subscription }: { user: UserInfo; su
 
         {/* Voltar */}
         <div className="settings-back">
-          <Link href={subscription.access.canAccessDashboard ? "/app" : "/planos"} className="link-back-home">
-            ← {subscription.access.canAccessDashboard ? "Voltar ao Painel" : "Voltar aos Planos"}
+          <Link href="/app" className="link-back-home">
+            ← Voltar ao Painel
           </Link>
           <form action="/api/admin/auth/logout" method="post">
             <button type="submit" className="logout-button">Sair da conta</button>

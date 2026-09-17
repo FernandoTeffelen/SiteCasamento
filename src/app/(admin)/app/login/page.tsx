@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DEMO_ADMIN_EMAIL, getAdminDashboardAccess, getCurrentAdminSession } from "@/server/auth/admin-auth.service";
+import { DEMO_ADMIN_EMAIL, getCurrentAdminSession } from "@/server/auth/admin-auth.service";
 import { getDemoAdminPassword } from "@/server/config/runtime";
 
 export const metadata = {
@@ -15,8 +15,7 @@ export default async function AdminLoginPage({
   // Uma sessão válida nunca volta a exibir o formulário de login.
   const user = await getCurrentAdminSession();
   if (user) {
-    const access = await getAdminDashboardAccess(user.id);
-    redirect(access.canAccessDashboard ? "/app" : "/planos?notice=subscription_required");
+    redirect("/app");
   }
 
   const params = await searchParams;

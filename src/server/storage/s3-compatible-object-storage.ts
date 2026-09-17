@@ -1,5 +1,6 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import type { ObjectStorage, StoredObject, UploadObjectInput } from "@/lib/storage/types";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { ObjectStorage, PresignedUpload, PresignedUploadInput, StoredObject, UploadObjectInput } from "@/lib/storage/types";
 
 type S3CompatibleConfig = {
   bucket: string;
@@ -33,6 +34,24 @@ export class S3CompatibleObjectStorage implements ObjectStorage {
       ContentType: input.contentType,
     }));
     return { storageKey: input.storageKey };
+  }
+
+  async createPresignedUpload(input: PresignedUploadInput): Promise<PresignedUpload> {
+    const url = await getSignedUrl(
+      this.client,
+      new PutObjectCommand({
+        Bucket: this.config.bucket,
+        Key: input.storageKey,
+        ContentType: input.contentType,
+      }),
+      { expiresIn: input.expiresInSeconds },
+    );
+    return {
+      url,
+      method: "PUT",
+      headers: { "Content-Type": input.contentType },
+      expiresAt: new Date(Date.now() + input.expiresInSeconds * 1_000).toISOString(),
+    };
   }
 
   async get(storageKey: string) {

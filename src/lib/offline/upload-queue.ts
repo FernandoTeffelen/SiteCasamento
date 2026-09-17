@@ -2,9 +2,11 @@ import { listQueuedPhotos, updateQueuedPhoto } from "./photo-queue";
 import type { QueuedPhotoUpload } from "./types";
 
 type UploadResponse = {
+  mode?: "direct" | "completed" | "server";
   submission?: { id?: string };
   score?: number;
   awardedNow?: boolean;
+  upload?: { url?: string; method?: "PUT"; headers?: Record<string, string> };
   error?: { code?: string; message?: string };
 };
 
@@ -22,6 +24,13 @@ async function readPayload(response: Response): Promise<UploadResponse> {
   } catch {
     return {};
   }
+}
+
+function shouldRetry(errorCode: string | undefined) {
+  return errorCode === "UPLOAD_IN_PROGRESS"
+    || errorCode === "UPLOAD_STORAGE_FAILED"
+    || errorCode === "UPLOAD_SIGNING_FAILED"
+    || errorCode === "RATE_LIMITED";
 }
 
 /** Uma tentativa individual. O Blob só sai do IndexedDB após o servidor confirmar. */
@@ -42,10 +51,6 @@ export async function uploadQueuedPhoto(
     attempts: photo.attempts + 1,
     lastError: undefined,
   });
-  const formData = new FormData();
-  formData.set("guestToken", uploadingPhoto.guestToken);
-  formData.set("uploadId", uploadingPhoto.id);
-  formData.set("photo", uploadingPhoto.file, "foto-original");
   if (!uploadingPhoto.legalAcceptance) {
     const failedPhoto = await updateQueuedPhoto(photo.id, {
       status: "failed",
@@ -53,34 +58,97 @@ export async function uploadQueuedPhoto(
     });
     return { ok: false, photo: failedPhoto, retryWhenOnline: false, message: failedPhoto.lastError ?? "Aceite necessário." };
   }
-  formData.set("acceptedLegalDocuments", "true");
-  formData.set("termsVersion", uploadingPhoto.legalAcceptance.termsVersion);
-  formData.set("privacyVersion", uploadingPhoto.legalAcceptance.privacyVersion);
-  formData.set("legalAcceptedAt", uploadingPhoto.legalAcceptance.acceptedAt);
 
-  try {
-    const response = await fetch(
-      `/api/events/${encodeURIComponent(eventIdentifier)}/missions/${encodeURIComponent(uploadingPhoto.missionId)}/submissions`,
-      { method: "POST", body: formData },
-    );
-    const payload = await readPayload(response);
-
-    if (!response.ok) {
-      const message = payload.error?.message ?? "Não foi possível enviar a foto. Tente novamente.";
-      const retryWhenOnline = payload.error?.code === "UPLOAD_IN_PROGRESS";
-      const updatedPhoto = await updateQueuedPhoto(photo.id, {
-        status: retryWhenOnline ? "pending" : "failed",
-        lastError: message,
-      });
-      return { ok: false, photo: updatedPhoto, retryWhenOnline, message };
-    }
-
+  const endpoint = `/api/events/${encodeURIComponent(eventIdentifier)}/missions/${encodeURIComponent(uploadingPhoto.missionId)}/submissions`;
+  const complete = async (payload: UploadResponse): Promise<UploadAttemptResult> => {
     const uploadedPhoto = await updateQueuedPhoto(photo.id, {
       status: "uploaded",
       remoteSubmissionId: payload.submission?.id,
       lastError: undefined,
     });
     return { ok: true, photo: uploadedPhoto, score: payload.score ?? 0, awardedNow: payload.awardedNow ?? false };
+  };
+  const failFromPayload = async (payload: UploadResponse): Promise<UploadAttemptResult> => {
+    const message = payload.error?.message ?? "Não foi possível enviar a foto. Tente novamente.";
+    const retryWhenOnline = shouldRetry(payload.error?.code);
+    const updatedPhoto = await updateQueuedPhoto(photo.id, {
+      status: retryWhenOnline ? "pending" : "failed",
+      lastError: message,
+    });
+    return { ok: false, photo: updatedPhoto, retryWhenOnline, message };
+  };
+  const uploadThroughApplication = async (): Promise<UploadAttemptResult> => {
+    const formData = new FormData();
+    formData.set("guestToken", uploadingPhoto.guestToken);
+    formData.set("uploadId", uploadingPhoto.id);
+    formData.set("photo", uploadingPhoto.file, "foto-original");
+    formData.set("acceptedLegalDocuments", "true");
+    formData.set("termsVersion", uploadingPhoto.legalAcceptance!.termsVersion);
+    formData.set("privacyVersion", uploadingPhoto.legalAcceptance!.privacyVersion);
+    formData.set("legalAcceptedAt", uploadingPhoto.legalAcceptance!.acceptedAt);
+
+    const response = await fetch(endpoint, { method: "POST", body: formData });
+    const payload = await readPayload(response);
+    return response.ok ? complete(payload) : failFromPayload(payload);
+  };
+
+  try {
+    const intentResponse = await fetch(`${endpoint}/presign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        guestToken: uploadingPhoto.guestToken,
+        uploadId: uploadingPhoto.id,
+        file: {
+          size: uploadingPhoto.file.size,
+          type: uploadingPhoto.file.type,
+          name: "foto-original",
+        },
+        acceptedLegalDocuments: true,
+        termsVersion: uploadingPhoto.legalAcceptance.termsVersion,
+        privacyVersion: uploadingPhoto.legalAcceptance.privacyVersion,
+        legalAcceptedAt: uploadingPhoto.legalAcceptance.acceptedAt,
+      }),
+    });
+    const intent = await readPayload(intentResponse);
+    if (!intentResponse.ok) {
+      // Em desenvolvimento ou durante uma atualização gradual, a rota nova
+      // pode não existir ainda. O caminho anterior mantém o envio funcional.
+      if (intentResponse.status === 404 || intentResponse.status === 405) return uploadThroughApplication();
+      return failFromPayload(intent);
+    }
+
+    if (intent.mode === "server") return uploadThroughApplication();
+    if (intent.mode === "completed") return complete(intent);
+    if (intent.mode !== "direct" || !intent.upload?.url) {
+      return failFromPayload({ error: { code: "UPLOAD_SIGNING_FAILED", message: "Não foi possível preparar o envio da foto. Tente novamente." } });
+    }
+
+    try {
+      const directResponse = await fetch(intent.upload.url, {
+        method: intent.upload.method ?? "PUT",
+        headers: intent.upload.headers,
+        body: uploadingPhoto.file,
+      });
+      if (!directResponse.ok) return uploadThroughApplication();
+    } catch {
+      // CORS ou uma falha transitória do storage não impede o caminho legado.
+      return uploadThroughApplication();
+    }
+
+    const finalizeResponse = await fetch(`${endpoint}/finalize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        guestToken: uploadingPhoto.guestToken,
+        uploadId: uploadingPhoto.id,
+        originalName: "foto-original",
+      }),
+    });
+    const finalized = await readPayload(finalizeResponse);
+    if (finalizeResponse.ok) return complete(finalized);
+    if (shouldRetry(finalized.error?.code)) return uploadThroughApplication();
+    return failFromPayload(finalized);
   } catch {
     const pendingPhoto = await updateQueuedPhoto(photo.id, {
       status: "pending",

@@ -37,13 +37,13 @@ export async function POST(request: Request) {
 
     const session = await authenticateAdmin({ email, password });
     const access = await getAdminDashboardAccess(session.user.id);
-    const redirectPath = access.canAccessDashboard ? "/app" : "/planos?notice=subscription_required";
+    const redirectPath = "/app";
 
     if (isJson) {
       const response = NextResponse.json({
         user: session.user,
         access,
-        isPaying: access.canAccessDashboard,
+        isPaying: access.hasActivePlan || access.creditsAvailable > 0 || access.hasCommercialHistory,
         redirectPath,
       });
       response.cookies.set({

@@ -12,6 +12,15 @@ import { visualConfigToCssVariables } from "@/lib/templates/wedding-visual-confi
 
 type LocalPhoto = QueuedPhotoUpload & { previewUrl: string };
 
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 8.5h3l1.2-2h7.6l1.2 2h3v10.2c0 .7-.6 1.3-1.3 1.3H5.3c-.7 0-1.3-.6-1.3-1.3V8.5Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <circle cx="12" cy="14" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 function getStatus(status: QueuedPhotoUpload["status"]) {
   if (status === "uploaded") return { label: "Enviada", className: "photo-status-sent", icon: "✓" };
   if (status === "uploading") return { label: "Enviando", className: "photo-status-pending", icon: "◌" };
@@ -168,7 +177,7 @@ export function MyPhotosClient({ event }: { event: EventView }) {
 
       {!isLoading && !loadError && photos.length === 0 ? (
         <section className="empty-photos">
-          <span aria-hidden="true">📷</span>
+          <span className="empty-photos-icon"><CameraIcon /></span>
           <h2>Nenhuma foto ainda</h2>
           <p>Quando você confirmar uma foto em uma missão, ela aparecerá aqui aguardando envio.</p>
           <Link href={`${event.publicPath}/jogo`}>Ver missões</Link>

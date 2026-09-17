@@ -12,7 +12,7 @@ function getAccountStatusLabel(access: AdminDashboardAccess) {
     return `${access.creditsAvailable} crédito${access.creditsAvailable === 1 ? "" : "s"}`;
   }
   if (access.hasCommercialHistory) return "Acesso permanente";
-  return "Plano pendente";
+  return "Sem créditos";
 }
 
 export function PublicAccountActions({

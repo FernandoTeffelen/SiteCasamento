@@ -34,6 +34,15 @@ function readApiError(payload: ApiError, fallback: string) {
   return payload.error?.message ?? fallback;
 }
 
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 8.5h3l1.2-2h7.6l1.2 2h3v10.2c0 .7-.6 1.3-1.3 1.3H5.3c-.7 0-1.3-.6-1.3-1.3V8.5Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <circle cx="12" cy="14" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 export function GameClient({ event }: { event: EventView }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -324,7 +333,7 @@ export function GameClient({ event }: { event: EventView }) {
             return (
               <article className={`mission-card ${mission.completed ? "mission-card-completed" : ""}`} key={mission.id}>
                 <div className="mission-card-top">
-                  <span className="mission-icon" aria-hidden="true">📷</span>
+                  <span className="mission-icon"><CameraIcon /></span>
                   {mission.completed ? (
                     <span className="mission-status">
                       <span aria-hidden="true">✓</span> Concluída · {photoCount} {photoCount === 1 ? "foto" : "fotos"}

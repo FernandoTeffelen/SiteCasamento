@@ -34,7 +34,18 @@
   gap: 0.85rem;
 }
 
-.admin-logo-badge { font-size: 1.8rem; }
+.admin-logo-badge {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  border: 1px solid #e8cbc6;
+  border-radius: 0.75rem;
+  background: #fff8f6;
+  color: #9c514c;
+}
+
+.admin-logo-badge svg { width: 1.4rem; height: 1.4rem; }
 .admin-brand-name { display: block; font-size: 1.15rem; font-weight: 800; color: #2d181b; }
 .admin-brand-sub { display: block; font-size: 0.75rem; font-weight: 700; color: #a95954; text-transform: uppercase; letter-spacing: 0.08em; }
 
@@ -69,6 +80,14 @@
   align-items: center;
   gap: 1rem;
 }
+
+.admin-settings-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.admin-settings-link svg { width: 1rem; height: 1rem; }
 
 .user-greeting { font-size: 0.875rem; color: #6d4e52; }
 .user-greeting strong { color: #2d181b; }
@@ -209,6 +228,8 @@
   transition: all 150ms ease;
 }
 
+.admin-btn-secondary svg { width: 1rem; height: 1rem; }
+
 .admin-btn-secondary:hover {
   background: #fbf4f2;
 }
@@ -221,8 +242,8 @@
 /* Metrics Grid */
 .admin-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem;
   margin-bottom: 2.25rem;
 }
 
@@ -230,11 +251,11 @@
   display: flex;
   align-items: center;
   gap: 1.15rem;
-  padding: 1.4rem 1.5rem;
+  padding: 1.2rem 1.25rem;
   background: #fff;
   border: 1px solid #f1deda;
-  border-radius: 1.25rem;
-  box-shadow: 0 4px 14px rgba(85, 42, 46, 0.03);
+  border-radius: 0.95rem;
+  box-shadow: 0 2px 8px rgba(85, 42, 46, 0.025);
 }
 
 .metric-icon {
@@ -242,14 +263,15 @@
   width: 3.25rem;
   height: 3.25rem;
   place-items: center;
-  border-radius: 1rem;
-  font-size: 1.5rem;
+  border-radius: 0.75rem;
 }
 
-.metric-purple { background: #f5edf7; }
-.metric-blue { background: #eaf3f9; }
-.metric-green { background: #eaf5ec; }
-.metric-amber { background: #fdf5e7; }
+.metric-icon svg { width: 1.45rem; height: 1.45rem; }
+
+.metric-purple { background: #f5edf7; color: #77558d; }
+.metric-blue { background: #eaf3f9; color: #3d718e; }
+.metric-green { background: #eaf5ec; color: #3c8050; }
+.metric-amber { background: #fdf5e7; color: #986a2f; }
 
 .metric-info { display: flex; flex-direction: column; }
 .metric-label { font-size: 0.8125rem; font-weight: 700; color: #876266; }
@@ -397,10 +419,15 @@
 }
 
 .wedding-card-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   margin: 0;
   font-size: 0.8125rem;
   color: #785a5e;
 }
+
+.wedding-card-date svg { width: 0.95rem; height: 0.95rem; }
 
 .status-badge-active {
   padding: 0.3rem 0.75rem;
@@ -425,12 +452,16 @@
 }
 
 .link-box-label {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.75rem;
   font-weight: 800;
   color: #8c575a;
   margin-bottom: 0.5rem;
 }
+
+.link-box-label svg { width: 0.9rem; height: 0.9rem; }
 
 .link-input-row {
   display: flex;
@@ -586,6 +617,8 @@
   font-size: 0.875rem;
   color: #5e4145;
 }
+
+.btn-delete-wedding svg { width: 0.95rem; height: 0.95rem; }
 
 .ranking-compact-list {
   list-style: none;

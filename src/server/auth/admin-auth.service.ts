@@ -288,9 +288,8 @@ export type AdminDashboardAccess = {
 };
 
 /**
- * O painel pertence permanentemente ao cliente depois da primeira liberação
- * comercial. Plano ou saldo determinam novas ativações; não apagam o acesso
- * aos casamentos já criados.
+ * Toda conta ativa com organização pode consultar o painel depois de se
+ * autenticar. Plano e créditos determinam somente a criação de casamentos.
  */
 export async function getAdminDashboardAccess(userId: string): Promise<AdminDashboardAccess> {
   const user = await prisma.user.findUnique({
@@ -354,7 +353,7 @@ export async function getAdminDashboardAccess(userId: string): Promise<AdminDash
   const hasCommercialHistory = commercialHistory > 0 || weddings > 0;
 
   return {
-    canAccessDashboard: hasActivePlan || creditsAvailable > 0 || hasCommercialHistory,
+    canAccessDashboard: true,
     hasCommercialHistory,
     hasActivePlan,
     creditsAvailable,

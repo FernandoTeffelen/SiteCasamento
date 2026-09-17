@@ -616,6 +616,7 @@
 }
 
 .empty-icon { font-size: 3rem; display: block; margin-bottom: 1rem; }
+.empty-icon svg { width: 3rem; height: 3rem; color: #a95954; }
 .empty-weddings-box h3 { margin: 0 0 0.5rem; font-size: 1.4rem; color: #2d181b; letter-spacing: -0.03em; }
 .empty-weddings-box p { margin: 0 0 1.5rem; color: #7b585c; font-size: 0.95rem; }
 

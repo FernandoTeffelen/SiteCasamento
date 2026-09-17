@@ -55,7 +55,7 @@ function RegisterForm() {
           setServerError(json.error?.message ?? "Erro ao criar conta.");
           return;
         }
-        router.push(json.redirectPath ?? "/planos?notice=new_account");
+        router.push(json.redirectPath ?? "/app");
       } catch {
         setServerError("Erro de conexão. Tente novamente.");
       }
