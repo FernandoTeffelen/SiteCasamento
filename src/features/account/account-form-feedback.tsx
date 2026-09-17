@@ -2,7 +2,11 @@
 
 import { useEffect } from "react";
 
-const loginActions = new Set(["/api/admin/auth/login", "/api/platform/auth/login"]);
+function getPendingCopy(action: string) {
+  if (action.endsWith("/login")) return { button: "Entrando...", status: "Estamos acessando seu painel." };
+  if (action.endsWith("/logout")) return { button: "Saindo...", status: "Estamos encerrando sua sessão." };
+  return { button: "Salvando...", status: "Estamos registrando esta alteração." };
+}
 
 function clearPendingState(form: HTMLFormElement) {
   const timeoutId = Number(form.dataset.pendingTimeout);
@@ -13,9 +17,10 @@ function clearPendingState(form: HTMLFormElement) {
     if (button.dataset.originalLabel) button.textContent = button.dataset.originalLabel;
     button.disabled = false;
     delete button.dataset.originalLabel;
+    delete button.dataset.formPending;
   }
 
-  form.querySelector("[data-login-pending-status]")?.remove();
+  form.querySelector("[data-form-pending-status]")?.remove();
   form.removeAttribute("aria-busy");
   delete form.dataset.submitting;
   delete form.dataset.pendingTimeout;
@@ -25,27 +30,31 @@ export function AccountFormFeedback() {
   useEffect(() => {
     function handleSubmit(event: Event) {
       const form = event.target;
-      if (!(form instanceof HTMLFormElement) || !loginActions.has(form.getAttribute("action") ?? "")) return;
+      if (!(form instanceof HTMLFormElement)) return;
+      const action = form.getAttribute("action") ?? "";
+      if (!action.startsWith("/api/")) return;
 
       const button = form.querySelector<HTMLButtonElement>('button[type="submit"], button:not([type])');
       if (!button || form.dataset.submitting === "true") return;
 
       form.dataset.submitting = "true";
       form.setAttribute("aria-busy", "true");
+      const copy = getPendingCopy(action);
       button.dataset.originalLabel = button.textContent ?? "Entrar";
-      button.textContent = "Entrando...";
+      button.dataset.formPending = "true";
+      button.textContent = copy.button;
       button.disabled = true;
 
       const status = document.createElement("p");
       status.className = "form-pending-status";
-      status.dataset.loginPendingStatus = "true";
+      status.dataset.formPendingStatus = "true";
       status.setAttribute("role", "status");
-      status.textContent = "Estamos acessando seu painel.";
+      status.textContent = copy.status;
       form.append(status);
 
       const timeoutId = window.setTimeout(() => {
         if (form.dataset.submitting === "true") {
-          status.textContent = "Ainda estamos acessando. Não feche esta página.";
+          status.textContent = "Ainda estamos processando. Não feche esta página.";
         }
       }, 4_000);
       form.dataset.pendingTimeout = String(timeoutId);

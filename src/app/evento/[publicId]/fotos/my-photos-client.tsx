@@ -25,6 +25,7 @@ export function MyPhotosClient({ event }: { event: EventView }) {
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [retryingPhotoId, setRetryingPhotoId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [acceptedLegacyPhotos, setAcceptedLegacyPhotos] = useState<Record<string, boolean>>({});
@@ -48,9 +49,12 @@ export function MyPhotosClient({ event }: { event: EventView }) {
         }
 
         setPhotos(localPhotos);
+        setIsSyncing(true);
         void uploadPendingPhotos(event.identifier, event.publicId, guestToken || undefined, (result) => {
           if (!isMounted) return;
           applyUploadResult(result);
+        }).finally(() => {
+          if (isMounted) setIsSyncing(false);
         });
       })
       .catch(() => {
@@ -157,7 +161,8 @@ export function MyPhotosClient({ event }: { event: EventView }) {
         <p>Você pode guardar várias fotos por missão. Os pontos da missão contam apenas uma vez.</p>
       </header>
 
-      {isLoading ? <p className="photos-feedback">Carregando suas fotos…</p> : null}
+      {isLoading ? <p className="photos-feedback photos-feedback-loading" role="status"><span className="inline-spinner" aria-hidden="true" />Carregando suas fotos…</p> : null}
+      {!isLoading && isSyncing ? <p className="photos-feedback photos-feedback-loading" role="status"><span className="inline-spinner" aria-hidden="true" />Enviando fotos pendentes em segundo plano…</p> : null}
       {loadError ? <p className="photos-feedback photos-error" role="alert">{loadError}</p> : null}
       {feedback ? <p className="photos-feedback" role="status">{feedback}</p> : null}
 

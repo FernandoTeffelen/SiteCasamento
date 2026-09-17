@@ -86,6 +86,36 @@
 .btn-login-submit:disabled { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; opacity: .78; }
 .btn-login-submit:disabled::before { width: .9rem; height: .9rem; border: 2px solid #ffffff80; border-top-color: #fff; border-radius: 50%; content: ""; animation: loading-turn .8s linear infinite; }
 .form-pending-status { margin: .9rem 0 0; color: #76585c; font-size: .875rem; line-height: 1.4; text-align: center; }
+.inline-spinner { display: inline-block; width: 1rem; height: 1rem; margin-right: .55rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -.15rem; animation: loading-turn .8s linear infinite; }
+.photos-feedback-loading, .admin-gallery-state[role="status"] { display: flex; align-items: center; justify-content: center; }
+.use-photo-button.is-pending { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; }
+.use-photo-button.is-pending::before { width: .9rem; height: .9rem; border: 2px solid #ffffff80; border-top-color: #fff; border-radius: 50%; content: ""; animation: loading-turn .8s linear infinite; }
+.settings-form button[type="submit"]:disabled,
+.platform-status-action button:disabled,
+.platform-delete-button:disabled,
+.btn-plan-back:disabled,
+.saved-photo-actions button:disabled,
+.admin-btn-secondary:disabled,
+.btn-toggle-public-access:disabled,
+.btn-delete-wedding:disabled { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; }
+.settings-form button[type="submit"]:disabled::before,
+.platform-status-action button:disabled::before,
+.platform-delete-button:disabled::before,
+.btn-plan-back:disabled::before,
+.saved-photo-actions button:disabled::before,
+.admin-btn-secondary:disabled::before,
+.btn-toggle-public-access:disabled::before,
+.btn-delete-wedding:disabled::before { width: .85rem; height: .85rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; content: ""; opacity: .7; animation: loading-turn .8s linear infinite; }
+.admin-action-feedback { display: flex; align-items: center; justify-content: flex-end; margin: -.4rem 0 .8rem; color: #76585c; font-size: .82rem; font-weight: 700; }
+button[data-form-pending="true"],
+form[aria-busy="true"] button[type="submit"]:disabled,
+.profile-form[aria-busy="true"] .profile-save,
+.entry-form[aria-busy="true"] button[type="submit"] { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; }
+button[data-form-pending="true"]::before,
+form[aria-busy="true"] button[type="submit"]:disabled::before,
+.profile-form[aria-busy="true"] .profile-save::before,
+.entry-form[aria-busy="true"] button[type="submit"]::before { width: .9rem; height: .9rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; content: ""; opacity: .72; animation: loading-turn .8s linear infinite; }
+.form-pending-status { margin: .9rem 0 0; color: #76585c; font-size: .875rem; line-height: 1.4; text-align: center; }
 @keyframes loading-turn { to { transform: rotate(360deg); } }
 @media (max-width: 47.99rem) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea { font-size: 16px; }

@@ -157,7 +157,7 @@ export function GuestProfileButton({
               <button type="button" onClick={closeProfile} aria-label="Fechar perfil" disabled={isSaving}>×</button>
             </div>
 
-            <form className="profile-form" onSubmit={saveProfile} noValidate>
+            <form className="profile-form" onSubmit={saveProfile} noValidate aria-busy={isSaving}>
               <div className="profile-avatar-editor">
                 <div className="profile-avatar-preview" aria-label="Prévia do seu avatar">
                   {shownAvatarUrl ? (

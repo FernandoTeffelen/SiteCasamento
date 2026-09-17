@@ -75,7 +75,7 @@ export function AdminWeddingGallery({
     <div className="admin-gallery-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <section className="admin-gallery-modal" role="dialog" aria-modal="true" aria-labelledby="admin-gallery-title">
+      <section className="admin-gallery-modal" role="dialog" aria-modal="true" aria-labelledby="admin-gallery-title" aria-busy={isLoading}>
         <header className="admin-gallery-header">
           <div>
             <span className="admin-gallery-kicker">Book / Galeria</span>
@@ -88,21 +88,21 @@ export function AdminWeddingGallery({
         <div className="admin-gallery-filters">
           <label>
             Convidado
-            <select value={guestId} onChange={(event) => handleGuestChange(event.target.value)}>
+            <select value={guestId} onChange={(event) => handleGuestChange(event.target.value)} disabled={isLoading}>
               <option value="">Todos os convidados</option>
               {gallery?.filters.guests.map((guest) => <option key={guest.id} value={guest.id}>{guest.name}</option>)}
             </select>
           </label>
           <label>
             Missao
-            <select value={missionId} onChange={(event) => handleMissionChange(event.target.value)}>
+            <select value={missionId} onChange={(event) => handleMissionChange(event.target.value)} disabled={isLoading}>
               <option value="">Todas as missoes</option>
               {gallery?.filters.missions.map((mission) => <option key={mission.id} value={mission.id}>{mission.title}</option>)}
             </select>
           </label>
         </div>
 
-        {isLoading && <div className="admin-gallery-state">Carregando fotos...</div>}
+        {isLoading && <div className="admin-gallery-state" role="status"><span className="inline-spinner" aria-hidden="true" />Carregando fotos...</div>}
         {error && <div className="admin-gallery-state admin-gallery-error">{error}</div>}
         {!isLoading && !error && gallery && gallery.photos.length === 0 && (
           <div className="admin-gallery-state">Nenhuma foto encontrada com esses filtros.</div>

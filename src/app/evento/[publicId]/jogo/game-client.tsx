@@ -341,7 +341,7 @@ export function GameClient({ event }: { event: EventView }) {
 
                 <div className="mission-action">
                   <span><strong>+{mission.points}</strong> pontos · uma vez</span>
-                  <button type="button" onClick={() => openCamera(mission.id)}>
+                  <button type="button" onClick={() => openCamera(mission.id)} disabled={isSavingPhoto}>
                     {photoCount > 0 ? "Adicionar outra foto" : "Tirar foto"}
                   </button>
                 </div>
@@ -364,7 +364,7 @@ export function GameClient({ event }: { event: EventView }) {
               <span>Confirmo que posso compartilhar esta foto, concordo com os <Link href="/termos-de-uso" target="_blank">Termos de Uso</Link> e li a <Link href="/privacidade" target="_blank">Política de Privacidade</Link>.</span>
             </label>
             <div className="photo-preview-actions">
-              <button className="use-photo-button" type="button" onClick={acceptPhoto} disabled={isSavingPhoto || !acceptedPhotoTerms}>
+              <button className={`use-photo-button ${isSavingPhoto ? "is-pending" : ""}`} type="button" onClick={acceptPhoto} disabled={isSavingPhoto || !acceptedPhotoTerms}>
                 {isSavingPhoto ? "Guardando foto…" : "Usar foto"}
               </button>
               <button className="retake-photo-button" type="button" onClick={takeAgain} disabled={isSavingPhoto}>

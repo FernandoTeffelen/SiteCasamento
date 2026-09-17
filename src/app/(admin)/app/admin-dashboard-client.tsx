@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { WeddingQrCode } from "@/features/wedding/wedding-qr-code";
 import type { AdminDashboardWedding } from "@/server/admin/admin-weddings.service";
@@ -23,6 +23,7 @@ export function AdminDashboardClient({
 }) {
   const [data, setData] = useState<DashboardData>(initialData);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const refreshInFlightRef = useRef(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [newlyCreatedWedding, setNewlyCreatedWedding] = useState<AdminDashboardWedding | null>(null);
@@ -45,6 +46,8 @@ export function AdminDashboardClient({
   const [galleryWedding, setGalleryWedding] = useState<AdminDashboardWedding | null>(null);
 
   async function fetchLatestData() {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     try {
       setIsRefreshing(true);
       const res = await fetch("/api/admin/weddings");
@@ -56,13 +59,14 @@ export function AdminDashboardClient({
       // Falha silenciosa em background polling
     } finally {
       setIsRefreshing(false);
+      refreshInFlightRef.current = false;
     }
   }
 
   // Auto-refresh a cada 15s silenciosamente (sem botão/toggle)
   useEffect(() => {
     const interval = setInterval(() => {
-      void fetchLatestData();
+      if (document.visibilityState === "visible") void fetchLatestData();
     }, 15000);
     return () => clearInterval(interval);
   }, []);
@@ -269,12 +273,16 @@ export function AdminDashboardClient({
               type="button"
               className={`admin-btn-secondary ${isRefreshing ? "spinning" : ""}`}
               onClick={() => void fetchLatestData()}
+              disabled={isRefreshing || isPending}
+              aria-busy={isRefreshing}
               title="Atualizar dados agora"
             >
               🔄 {isRefreshing ? "Atualizando..." : "Atualizar"}
             </button>
           </div>
         </section>
+
+        {isRefreshing ? <p className="admin-action-feedback" role="status"><span className="inline-spinner" aria-hidden="true" />Atualizando os dados do painel…</p> : null}
 
         {!canCreateWedding ? (
           <section className="admin-access-notice" aria-label="Status dos créditos">
