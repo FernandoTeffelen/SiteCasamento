@@ -220,11 +220,11 @@ export async function createMercadoPagoSubscriptionCheckout(
 
   const existing = await prisma.paymentAttempt.findUnique({
     where: { organizationId_idempotencyKey: { organizationId: membership.organizationId, idempotencyKey: input.checkoutRequestId } },
-    select: { id: true, externalReference: true, checkoutUrl: true, providerPreferenceId: true, subscription: { select: { providerSubscriptionId: true } } },
+    select: { id: true, externalReference: true, checkoutUrl: true, priceCents: true, currency: true, subscriptionId: true, providerPreferenceId: true, subscription: { select: { providerSubscriptionId: true, cycleMonths: true, plan: { select: { name: true } } } } },
   });
   if (existing?.checkoutUrl && existing.subscription?.providerSubscriptionId) return existing;
 
-  const checkout = await prisma.$transaction(async (transaction) => {
+  const checkout = existing ?? await prisma.$transaction(async (transaction) => {
     const plan = await transaction.subscriptionPlan.findFirst({
       where: { id: input.selection.planId, active: true },
       select: { id: true, slug: true, name: true, tier: true, period: true, cycleMonths: true, creditsPerCycle: true, priceCents: true, currency: true },
@@ -247,7 +247,7 @@ export async function createMercadoPagoSubscriptionCheckout(
 
   try {
     if (!gateway.createSubscription) throw new DomainError("PAYMENT_PROVIDER_ERROR", 502, "O checkout recorrente ainda não está disponível.");
-    const subscription = await gateway.createSubscription({ externalReference: checkout.externalReference, reason: checkout.title, payerEmail: input.user.email, frequency: checkout.frequency, frequencyType: "months", transactionAmountCents: checkout.priceCents, currency: checkout.currency });
+    const subscription = await gateway.createSubscription({ externalReference: checkout.externalReference, reason: "Assinatura SiteCasamento", payerEmail: input.user.email, frequency: "frequency" in checkout ? checkout.frequency : checkout.subscription?.cycleMonths ?? 1, frequencyType: "months", transactionAmountCents: checkout.priceCents, currency: checkout.currency });
     await prisma.organizationSubscription.update({ where: { id: checkout.subscriptionId ?? "" }, data: { providerSubscriptionId: subscription.id, status: SubscriptionStatus.PENDING } });
     return prisma.paymentAttempt.update({ where: { id: checkout.id }, data: { status: PaymentAttemptStatus.PENDING, checkoutUrl: subscription.checkoutUrl, providerStatus: subscription.status, lastErrorCode: null, lastErrorMessage: null }, select: { id: true, externalReference: true, checkoutUrl: true } });
   } catch (error) {
