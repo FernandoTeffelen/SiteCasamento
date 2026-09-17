@@ -1,4 +1,5 @@
 import { prisma } from "@/server/db/prisma";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { DomainError } from "@/server/domain/error";
 import { assertWeddingIsActive, findWeddingByPublicAccessToken } from "@/server/events/wedding.service";
 import { getGuestContext } from "@/server/guests/guest.service";
@@ -22,23 +23,63 @@ function validateGuestToken(guestToken: unknown) {
   return guestToken;
 }
 
+function canUseNextDataCache() {
+  return Boolean(process.env.NEXT_RUNTIME);
+}
+
+type ActiveMission = {
+  id: string;
+  title: string;
+  description: string | null;
+  points: number;
+  displayOrder: number;
+  maxSubmissions: number | null;
+};
+
+function weddingMissionsTag(weddingId: string) {
+  return `wedding-missions:${weddingId}`;
+}
+
+/** Deve ser chamado pela futura edição administrativa de desafios. */
+export function invalidateWeddingMissionsCache(weddingId: string) {
+  if (canUseNextDataCache()) revalidateTag(weddingMissionsTag(weddingId), "max");
+}
+
+/**
+ * A lista-base de desafios não contém estado de convidado. O estado individual
+ * (pontuação, conclusão e envios) continua sendo consultado sem cache abaixo.
+ */
+async function readActiveMissions(organizationId: string, weddingId: string): Promise<ActiveMission[]> {
+  return prisma.mission.findMany({
+    where: { organizationId, weddingId, active: true },
+    orderBy: { displayOrder: "asc" },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      points: true,
+      displayOrder: true,
+      maxSubmissions: true,
+    },
+  });
+}
+
+function getCachedActiveMissions(organizationId: string, weddingId: string) {
+  return unstable_cache(
+    () => readActiveMissions(organizationId, weddingId),
+    ["active-wedding-missions-v1", organizationId, weddingId],
+    { tags: [weddingMissionsTag(weddingId)], revalidate: 300 },
+  );
+}
+
 export async function listGuestMissions(eventIdentifier: string, rawGuestToken: unknown) {
   const guestToken = validateGuestToken(rawGuestToken);
   const { wedding, guest } = await getGuestContext(eventIdentifier, guestToken);
 
   const [missions, scoreEntries, submissionCounts] = await Promise.all([
-    prisma.mission.findMany({
-      where: { organizationId: wedding.organizationId, weddingId: wedding.id, active: true },
-      orderBy: { displayOrder: "asc" },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        points: true,
-        displayOrder: true,
-        maxSubmissions: true,
-      },
-    }),
+    canUseNextDataCache()
+      ? getCachedActiveMissions(wedding.organizationId, wedding.id)()
+      : readActiveMissions(wedding.organizationId, wedding.id),
     prisma.scoreEntry.findMany({
       where: { organizationId: wedding.organizationId, weddingId: wedding.id, guestId: guest.id },
       select: { missionId: true },

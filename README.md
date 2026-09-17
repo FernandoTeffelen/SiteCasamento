@@ -71,6 +71,15 @@ Configure as variáveis de `.env.example` no ambiente da Vercel. Os valores prin
 
 Não coloque `.env`, tokens, senhas, chaves R2 ou credenciais de pagamento no Git. A pasta `docs/` contém anotações operacionais locais e permanece ignorada pelo Git.
 
+## Cache
+
+- Catálogo comercial: cache de 60 segundos; os preços continuam sendo validados no servidor no checkout.
+- Templates ativos: cache de 1 hora, com tag `wedding-templates-v1` para invalidação ao alterar o catálogo de templates.
+- Configuração visual de cada casamento: cache de 1 hora, invalidado imediatamente pelas funções de troca de template ou personalização daquele casamento.
+- Lista-base de missões ativas: cache de 5 minutos por casamento. Pontuação, envios, conclusão por convidado, ranking, sessões, pagamentos e dados administrativos permanecem sem cache compartilhado.
+
+O cache do Next é usado somente no runtime da aplicação; testes e scripts diretos continuam consultando o banco para permanecerem determinísticos.
+
 ## Qualidade
 
 ```powershell

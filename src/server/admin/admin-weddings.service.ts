@@ -10,6 +10,7 @@ import { activateWeddingWithCredit } from "@/server/billing/credit.service";
 import { confirmAdminPassword } from "@/server/auth/admin-auth.service";
 import { OrganizationRole, WeddingStatus, WeddingTemplateTier } from "@/generated/prisma/client";
 import { defaultWeddingVisualConfig } from "@/lib/templates/wedding-visual-config";
+import { invalidateWeddingTemplatesCache } from "@/server/templates/wedding-template.service";
 
 const ALLOWED_IMAGE_CONTENT_TYPES = new Set([
   "image/jpeg",
@@ -310,6 +311,7 @@ export async function createAdminWedding(input: {
         defaultConfig: defaultWeddingVisualConfig,
       },
     });
+    invalidateWeddingTemplatesCache();
   }
 
   const wedding = await prisma.wedding.create({
